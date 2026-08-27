@@ -119,11 +119,11 @@ acceptable-use terms belong to the tunnel provider and can change. The security
 model requires a reserved hostname; an ephemeral URL is not a deployment
 option.
 
-| Option | Stable public name | What to configure |
-| --- | --- | --- |
-| [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/) | A hostname on a domain in Cloudflare | Create a **named** tunnel, route the hostname to `http://127.0.0.1:3000`, and set `CLOUDFLARED_TOKEN`. |
-| [Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel) | The machine's stable `*.ts.net` name | Sign in with the Tailscale CLI, enable Funnel, and set `TAILSCALE_FUNNEL_HOSTNAME` to the hostname used by `PUBLIC_URL`. |
-| [zrok reserved share](https://docs.zrok.io/docs/concepts/sharing-reserved/) | A reserved public share | Enable the zrok CLI, reserve a public share for `http://127.0.0.1:3000`, and set `ZROK_RESERVED_SHARE` to its token. |
+| Option                                                                                                       | Stable public name                   | What to configure                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/) | A hostname on a domain in Cloudflare | Create a **named** tunnel, route the hostname to `http://127.0.0.1:3000`, and set `CLOUDFLARED_TOKEN`.                   |
+| [Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel)                                     | The machine's stable `*.ts.net` name | Sign in with the Tailscale CLI, enable Funnel, and set `TAILSCALE_FUNNEL_HOSTNAME` to the hostname used by `PUBLIC_URL`. |
+| [zrok reserved share](https://docs.zrok.io/docs/concepts/sharing-reserved/)                                  | A reserved public share              | Enable the zrok CLI, reserve a public share for `http://127.0.0.1:3000`, and set `ZROK_RESERVED_SHARE` to its token.     |
 
 ### Cloudflare named Tunnel
 

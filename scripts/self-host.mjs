@@ -78,7 +78,9 @@ function validateConfiguration() {
     );
   }
   if (!/^[A-Za-z0-9_-]{16,128}$/u.test(requiredEnv("AUTH_INSTANCE_ID"))) {
-    throw new Error("AUTH_INSTANCE_ID must be a 16-128 character base64url value.");
+    throw new Error(
+      "AUTH_INSTANCE_ID must be a 16-128 character base64url value."
+    );
   }
   const vaultKey =
     process.env.VAULT_ENCRYPTION_KEY?.trim() ||
@@ -88,7 +90,9 @@ function validateConfiguration() {
     !/^[A-Za-z0-9+/_-]+={0,2}$/u.test(vaultKey) ||
     Buffer.from(vaultKey, "base64").length !== 32
   ) {
-    throw new Error("VAULT_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");
+    throw new Error(
+      "VAULT_ENCRYPTION_KEY must be a base64-encoded 32-byte key."
+    );
   }
   for (const name of [
     "KERNEL_API_KEY",
@@ -239,13 +243,10 @@ async function waitForPublicServer(tunnelProcess) {
       throw new Error("The tunnel exited before the public service was ready.");
     }
     try {
-      const response = await fetch(
-        new URL("/eve/v1/health", publicOrigin),
-        {
-          cache: "no-store",
-          redirect: "error",
-        }
-      );
+      const response = await fetch(new URL("/eve/v1/health", publicOrigin), {
+        cache: "no-store",
+        redirect: "error",
+      });
       if (response.ok) return;
     } catch {
       // DNS, TLS, or the tunnel may still be converging.

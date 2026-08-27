@@ -1,15 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 describe("Kernel browser integration", () => {
   it("uses the locally scoped tools without the Vercel extension adapter", () => {
-    const manifest = JSON.parse(readFileSync("package.json", "utf8")) as {
-      dependencies: Record<string, string>;
-    };
-    expect(manifest.dependencies).not.toHaveProperty(
-      "@onkernel/eve-extension"
-    );
-    expect(readFileSync("agent/tools/browser.ts", "utf8")).toContain(
+    const manifest = z
+      .object({ dependencies: z.record(z.string(), z.string()) })
+      .parse(JSON.parse(readFileSync("package.json", "utf8")));
+    expect(manifest.dependencies).not.toHaveProperty("@onkernel/eve-extension");
+    expect(readFileSync("lib/server/kernel-browser.ts", "utf8")).toContain(
       "requireOwnedBrowserSession"
     );
   });
