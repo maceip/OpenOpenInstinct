@@ -30,6 +30,10 @@ const managerVaultItemSchema = z.object({
 export const managerSnapshotSchema = z.object({
   browser: z.object({ available: z.boolean() }),
   channels: z.object({ linqPhoneNumber: z.string().optional() }),
+  googleWorkspace: z.object({
+    accountLabel: z.string().nullable(),
+    state: z.enum(["connected", "disconnected", "unavailable"]),
+  }),
   runtime: z.object({ inference: z.string(), provider: z.string() }),
   secretStore: z.object({
     available: z.boolean(),

@@ -114,19 +114,29 @@ describe("database services", () => {
     expect(await vault.readVaultItem(bob, "vault-alice")).toBeUndefined();
     expect(await vault.deleteVaultItem(bob, "vault-alice")).toBe(false);
 
-    await secrets.writeEncryptedSecret(alice, "shared-id", "ciphertext-alice");
-    await secrets.writeEncryptedSecret(bob, "shared-id", "ciphertext-bob");
-    expect(await secrets.readEncryptedSecret(alice, "shared-id")).toBe(
+    await secrets.writeEncryptedSecret(
+      alice,
+      "vault",
+      "shared-id",
       "ciphertext-alice"
     );
-    expect(await secrets.readEncryptedSecret(bob, "shared-id")).toBe(
+    await secrets.writeEncryptedSecret(
+      bob,
+      "vault",
+      "shared-id",
       "ciphertext-bob"
     );
-    await secrets.deleteEncryptedSecret(alice, "shared-id");
+    expect(await secrets.readEncryptedSecret(alice, "vault", "shared-id")).toBe(
+      "ciphertext-alice"
+    );
+    expect(await secrets.readEncryptedSecret(bob, "vault", "shared-id")).toBe(
+      "ciphertext-bob"
+    );
+    await secrets.deleteEncryptedSecret(alice, "vault", "shared-id");
     expect(
-      await secrets.readEncryptedSecret(alice, "shared-id")
+      await secrets.readEncryptedSecret(alice, "vault", "shared-id")
     ).toBeUndefined();
-    expect(await secrets.readEncryptedSecret(bob, "shared-id")).toBe(
+    expect(await secrets.readEncryptedSecret(bob, "vault", "shared-id")).toBe(
       "ciphertext-bob"
     );
   });

@@ -5,6 +5,8 @@ const testEnvironment = {
   AI_PROVIDER: "openai",
   AUTH_INSTANCE_ID: "test-instance-000000000000",
   DATABASE_PATH: ":memory:",
+  GOOGLE_CLIENT_ID: "test-google-client-id",
+  GOOGLE_CLIENT_SECRET: "test-google-client-secret",
   KERNEL_API_KEY: "test-kernel-key",
   LINQ_API_KEY: "test-linq-key",
   LINQ_WEBHOOK_SECRET: "test-linq-webhook-secret",

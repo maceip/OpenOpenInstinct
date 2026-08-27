@@ -28,6 +28,7 @@ Migration filenames begin with a four-digit version:
 0001_application.sqlite.sql
 0002_device_auth.sqlite.sql
 0003_instance_state.sqlite.sql
+0004_secret_namespaces.sqlite.sql
 ```
 
 Versions must be contiguous. Each pending file runs inside `BEGIN EXCLUSIVE`;
@@ -69,8 +70,9 @@ must not issue request-time DDL.
 ## Secrets and permissions
 
 `encrypted_secrets.encrypted_value` contains AES-256-GCM envelopes, not raw
-credentials. The authenticated data binds each ciphertext to its workspace,
-namespace, and item ID. The encryption key lives in
+credentials or OAuth tokens. The authenticated data binds each ciphertext to
+its workspace, namespace, and item ID. The `vault` and `google-oauth`
+namespaces cannot be substituted for one another. The encryption key lives in
 `VAULT_ENCRYPTION_KEY`, never in SQLite.
 
 On POSIX hosts the process uses a restrictive umask and applies mode `0600` to

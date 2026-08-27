@@ -31,6 +31,7 @@ flowchart TB
   server --> sqlite["Local SQLite + encrypted vault"]
   server --> model["Your model provider"]
   server --> kernel["Kernel browser sessions"]
+  server --> google["Optional Google Workspace"]
   imessage["iMessage via Linq"] --> server
 ```
 
@@ -111,6 +112,43 @@ Validate everything before startup:
 ```bash
 pnpm self-host:check -- --tunnel=cloudflare
 ```
+
+## Optional Google Workspace connection
+
+OpenOpenInstinct can connect Gmail, Calendar, and read-only Contacts without a
+Vercel token broker. OAuth runs directly on the self-hosted server. Refresh and
+access tokens are encrypted with AES-256-GCM in SQLite under a dedicated
+`google-oauth` namespace; they are never returned to the model or browser UI.
+
+1. In a Google Cloud project, configure the OAuth consent screen and enable the
+   Gmail API, Google Calendar API, and People API.
+2. Create an OAuth 2.0 **Web application** client.
+3. Register this exact authorized redirect URI, using your stable tunnel origin:
+
+   ```text
+   https://assistant.example.com/api/connectors/google
+   ```
+
+4. Put the client values in `.env.local` and restart:
+
+   ```dotenv
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   ```
+
+5. Open the workspace page and select **Connect** beside Google Workspace.
+
+The grant uses `gmail.modify`, Calendar event/free-busy, and read-only Contacts
+scopes; it never requests the permanent-delete `mail.google.com` scope. Sending
+mail and creating confirmed events require user approval. Reversible Gmail
+label changes operate on exact message IDs.
+
+Google OAuth redirect allowlists are hostname-specific. The stable tunnel name
+should not normally change. If exceptional tunnel recovery changes
+`PUBLIC_URL`, add the new callback URI in Google Cloud before reconnecting; the
+automatic Linq device-recovery link cannot edit a third-party OAuth console.
+Google apps in Testing mode work only for listed test users and their grants may
+expire after seven days. Never commit the OAuth client secret.
 
 ## Choose a stable tunnel
 
@@ -306,6 +344,9 @@ See [`db/README.md`](db/README.md) for the schema and migration contract.
 - **Vault encryption:** values use AES-256-GCM with a random 96-bit nonce and
   authenticated workspace, namespace, and item identity. Missing vault fields
   return structured errors instead of empty strings.
+- **OAuth isolation:** Google grants use an encrypted namespace separate from
+  vault items. Authorization state is random, workspace-bound, expires after ten
+  minutes, and is consumed once before the code exchange.
 - **Authentication abuse:** global and per-device attempt limits complement
   high-entropy, short-lived, one-use pairings and challenges.
 - **Streaming continuity:** the Eve NDJSON stream disables proxy buffering. The

@@ -10,6 +10,9 @@ describe("SQLite schema policy", () => {
     const authentication = await read(
       "db/migrations/0002_device_auth.sqlite.sql"
     );
+    const secretNamespaces = await read(
+      "db/migrations/0004_secret_namespaces.sqlite.sql"
+    );
 
     expect(application.match(/\) STRICT;/gu)).toHaveLength(7);
     expect(authentication.match(/\) STRICT;/gu)).toHaveLength(5);
@@ -22,6 +25,8 @@ describe("SQLite schema policy", () => {
     expect(authentication).toContain(
       "CREATE UNIQUE INDEX auth_sessions_secret_hash_idx"
     );
+    expect(secretNamespaces).toContain("'google-oauth'");
+    expect(secretNamespaces).toContain(") STRICT;");
   });
 
   it("runs native migrations and a three-OS CI matrix", async () => {
