@@ -1,0 +1,71 @@
+import type { ToolContext } from "eve/tools";
+import type { output, ZodType } from "zod";
+import { scopeFromPrincipal } from "@/lib/access-scope";
+import { getGoogleWorkspaceAccessToken } from "@/lib/runtime/google-workspace";
+
+export async function googleWorkspaceFetch<TSchema extends ZodType>(
+  ctx: ToolContext,
+  url: string,
+  schema: TSchema,
+  init: RequestInit = {}
+): Promise<output<TSchema>> {
+  const caller = ctx.session.auth.current ?? ctx.session.auth.initiator;
+  if (!caller) throw new Error("An authenticated user is required.");
+  const scope = scopeFromPrincipal(caller);
+
+  const send = async (forceRefresh: boolean) => {
+    const token = await getGoogleWorkspaceAccessToken(scope, { forceRefresh });
+    const headers = new Headers(init.headers);
+    headers.set("accept", "application/json");
+    headers.set("authorization", `Bearer ${token}`);
+    if (init.body && !headers.has("content-type")) {
+      headers.set("content-type", "application/json");
+    }
+    return fetch(url, { ...init, headers, signal: ctx.abortSignal });
+  };
+
+  let response = await send(false);
+  if (response.status === 401) response = await send(true);
+  if (!response.ok) {
+    const detail = redactGoogleText(await response.text().catch(() => ""), 500);
+    throw new Error(
+      `Google Workspace returned HTTP ${String(response.status)}: ${detail}`
+    );
+  }
+  const body: unknown =
+    response.status === 204 ? undefined : await response.json();
+  return schema.parse(body);
+}
+
+export function decodeBase64Url(value: string) {
+  return Buffer.from(
+    value.replace(/-/gu, "+").replace(/_/gu, "/"),
+    "base64"
+  ).toString("utf8");
+}
+
+export function encodeBase64Url(value: string) {
+  return Buffer.from(value, "utf8").toString("base64url");
+}
+
+const secretPatterns: readonly (readonly [RegExp, string])[] = [
+  [/\b\d{6}\b/gu, "[six-digit code redacted]"],
+  [/\bsk-(?:proj-)?[A-Za-z0-9_-]{12,}\b/gu, "[api key redacted]"],
+  [/\bgh[pousr]_[A-Za-z0-9]{20,}\b/gu, "[github token redacted]"],
+  [/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/gu, "[aws key redacted]"],
+  [/\bAIza[A-Za-z0-9_-]{30,}\b/gu, "[google api key redacted]"],
+  [/\b(?:bearer\s+)[A-Za-z0-9._~+/-]+=*\b/giu, "Bearer [token redacted]"],
+  [
+    /\b(password|passcode|api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
+    "$1=[credential redacted]",
+  ],
+  [/\b(?:\d[ -]*?){13,19}\b/gu, "[payment number redacted]"],
+];
+
+export function redactGoogleText(value: string, maxLength = 12_000) {
+  let redacted = value.slice(0, maxLength);
+  for (const [pattern, replacement] of secretPatterns) {
+    redacted = redacted.replace(pattern, replacement);
+  }
+  return redacted;
+}

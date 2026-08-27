@@ -3,39 +3,30 @@ import { ensureScope } from "@/db/services/scope";
 import {
   createVaultItem as insertVaultItem,
   deleteVaultItem,
-  listVaultItems,
 } from "@/db/services/vault";
 import type { AccessScope } from "../access-scope";
 import { env } from "../env";
 import type { ManagerMutation } from "../manager";
 import { getModelSettings } from "../model-config";
+import { getGoogleWorkspaceConnection } from "./google-workspace";
+import { readManagerVaultItems } from "./manager-vault";
 import {
   deleteSecret,
-  hasSecret,
   secretStoreStatus,
   writeSecret,
 } from "../server/secret-store";
 
 export async function readManagerSnapshot(scope: AccessScope) {
-  await ensureScope(scope);
-  const [vaultRows, modelSettings] = await Promise.all([
-    listVaultItems(scope),
+  const [googleWorkspace, vaultItems, modelSettings] = await Promise.all([
+    getGoogleWorkspaceConnection(scope),
+    readManagerVaultItems(scope),
     Promise.resolve(getModelSettings()),
   ]);
-  const vaultItems = await Promise.all(
-    vaultRows.map(async (row) => ({
-      ...row,
-      hasSecret: await hasSecret({
-        id: row.id,
-        namespace: "vault",
-        scope,
-      }),
-    }))
-  );
 
   return {
     browser: { available: true },
     channels: { linqPhoneNumber: env.LINQ_PHONE_NUMBER },
+    googleWorkspace,
     runtime: {
       inference: modelSettings.modelId,
       provider: modelSettings.provider,

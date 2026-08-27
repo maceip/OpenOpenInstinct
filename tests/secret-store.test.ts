@@ -11,17 +11,22 @@ afterEach(() => {
 describe("vault encryption", () => {
   it("stores only authenticated ciphertext and binds it to the workspace", async () => {
     vi.doMock("@/db/services/secrets", () => ({
-      deleteEncryptedSecret: (scope: Scope, id: string) => {
-        values.delete(storageKey(scope, id));
+      deleteEncryptedSecret: (
+        scope: Scope,
+        namespace: Namespace,
+        id: string
+      ) => {
+        values.delete(storageKey(scope, namespace, id));
       },
-      readEncryptedSecret: (scope: Scope, id: string) =>
-        values.get(storageKey(scope, id)),
+      readEncryptedSecret: (scope: Scope, namespace: Namespace, id: string) =>
+        values.get(storageKey(scope, namespace, id)),
       writeEncryptedSecret: (
         scope: Scope,
+        namespace: Namespace,
         id: string,
         encryptedValue: string
       ) => {
-        values.set(storageKey(scope, id), encryptedValue);
+        values.set(storageKey(scope, namespace, id), encryptedValue);
       },
     }));
     const { readSecret, writeSecret } =
@@ -36,7 +41,7 @@ describe("vault encryption", () => {
       value: "correct horse battery staple",
     });
 
-    const ciphertext = values.get(storageKey(alice, "vault-item"));
+    const ciphertext = values.get(storageKey(alice, "vault", "vault-item"));
     expect(ciphertext).toMatch(/^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\./u);
     expect(ciphertext).not.toContain("correct horse battery staple");
     expect(
@@ -48,9 +53,18 @@ describe("vault encryption", () => {
     ).toBe("correct horse battery staple");
 
     if (!ciphertext) throw new Error("Expected encrypted test data.");
-    values.set(storageKey(bob, "vault-item"), ciphertext);
+    values.set(storageKey(bob, "vault", "vault-item"), ciphertext);
     await expect(
       readSecret({ id: "vault-item", namespace: "vault", scope: bob })
+    ).rejects.toThrow(/authenticate|authentication/iu);
+
+    values.set(storageKey(alice, "google-oauth", "vault-item"), ciphertext);
+    await expect(
+      readSecret({
+        id: "vault-item",
+        namespace: "google-oauth",
+        scope: alice,
+      })
     ).rejects.toThrow(/authenticate|authentication/iu);
   });
 });
@@ -60,6 +74,8 @@ interface Scope {
   readonly workspaceId: string;
 }
 
-function storageKey(scope: Scope, id: string) {
-  return `${scope.workspaceId}:${id}`;
+type Namespace = "google-oauth" | "vault";
+
+function storageKey(scope: Scope, namespace: Namespace, id: string) {
+  return `${scope.workspaceId}:${namespace}:${id}`;
 }

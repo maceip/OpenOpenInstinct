@@ -65,6 +65,8 @@ const runtimeEnv = createEnv({
       (value) => value === undefined || URL.canParse(value),
       "EVE_NEXT_PRODUCTION_ORIGIN must be an absolute URL"
     ),
+    GOOGLE_CLIENT_ID: optionalValue,
+    GOOGLE_CLIENT_SECRET: optionalValue,
     GOOGLE_GENERATIVE_AI_API_KEY: optionalValue,
     KERNEL_API_KEY: requiredValue,
     LINQ_API_KEY: requiredValue,
@@ -81,6 +83,15 @@ const runtimeEnv = createEnv({
   },
   experimental__runtimeEnv: {},
 });
+
+if (
+  Boolean(runtimeEnv.GOOGLE_CLIENT_ID) !==
+  Boolean(runtimeEnv.GOOGLE_CLIENT_SECRET)
+) {
+  throw new Error(
+    "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured together."
+  );
+}
 
 const vaultEncryptionKey =
   runtimeEnv.VAULT_ENCRYPTION_KEY ?? runtimeEnv.SECRET_ENCRYPTION_KEY;

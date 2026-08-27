@@ -11,9 +11,14 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import type { ManagerSnapshot } from "@/lib/manager";
 import { useManager } from "./use-manager";
 
-export function WorkspaceManager() {
+export function WorkspaceManager({
+  googleNotice,
+}: {
+  readonly googleNotice?: "unavailable";
+}) {
   const { error, snapshot } = useManager();
   const browserReady = snapshot?.browser.available === true;
 
@@ -29,10 +34,23 @@ export function WorkspaceManager() {
         </Alert>
       ) : null}
 
+      {googleNotice === "unavailable" ? (
+        <Alert>
+          <MailIcon />
+          <AlertTitle>Google Workspace connection failed</AlertTitle>
+          <AlertDescription>
+            Check the local OAuth credentials and registered callback URL, then
+            try connecting again.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <ChannelsSection
         browserReady={browserReady}
         linqPhoneNumber={snapshot?.channels.linqPhoneNumber}
       />
+
+      <GoogleWorkspaceSection connection={snapshot?.googleWorkspace} />
 
       <section aria-labelledby="connectors-heading" className="space-y-3">
         <h2 className="type-section-title" id="connectors-heading">
@@ -66,6 +84,62 @@ export function WorkspaceManager() {
         </div>
       </section>
     </main>
+  );
+}
+
+function GoogleWorkspaceSection({
+  connection,
+}: {
+  readonly connection?: ManagerSnapshot["googleWorkspace"];
+}) {
+  const state = connection?.state;
+  const description =
+    state === "connected"
+      ? (connection?.accountLabel ??
+        "Gmail, Calendar, and Contacts are connected.")
+      : state === "unavailable"
+        ? "Add local Google OAuth credentials to enable this connection."
+        : "Gmail, Calendar, and read-only Contacts through your Google account.";
+
+  return (
+    <section aria-labelledby="connections-heading" className="space-y-3">
+      <h2 className="type-section-title" id="connections-heading">
+        Connections
+      </h2>
+      <div className="divide-y divide-border/50 border-y border-border/50">
+        <ConnectorRow
+          action={<GoogleWorkspaceAction state={state} />}
+          description={description}
+          icon={<MailIcon />}
+          label="Google Workspace"
+        />
+      </div>
+    </section>
+  );
+}
+
+function GoogleWorkspaceAction({
+  state,
+}: {
+  readonly state?: ManagerSnapshot["googleWorkspace"]["state"];
+}) {
+  if (!state) {
+    return <span className="type-caption text-muted-foreground">Loading…</span>;
+  }
+  if (state === "unavailable") {
+    return (
+      <span className="type-caption text-muted-foreground">Setup required</span>
+    );
+  }
+
+  const action = state === "connected" ? "disconnect" : "connect";
+  return (
+    <form action="/api/connectors/google" method="post">
+      <input name="action" type="hidden" value={action} />
+      <Button size="sm" type="submit" variant="outline">
+        {state === "connected" ? "Disconnect" : "Connect"}
+      </Button>
+    </form>
   );
 }
 

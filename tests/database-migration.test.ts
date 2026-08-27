@@ -26,7 +26,7 @@ describe("SQLite migrations", () => {
     expect(database.prepare("PRAGMA foreign_keys").get()?.foreign_keys).toBe(1);
     expect(database.prepare("PRAGMA busy_timeout").get()?.timeout).toBe(5000);
     expect(database.prepare("PRAGMA synchronous").get()?.synchronous).toBe(2);
-    expect(database.prepare("PRAGMA user_version").get()?.user_version).toBe(3);
+    expect(database.prepare("PRAGMA user_version").get()?.user_version).toBe(4);
 
     const expectedTables = [
       "agent_sessions",
@@ -57,7 +57,7 @@ describe("SQLite migrations", () => {
     database.close();
     databases.splice(databases.indexOf(database), 1);
     const reopened = track(openDatabase(path));
-    expect(reopened.prepare("PRAGMA user_version").get()?.user_version).toBe(3);
+    expect(reopened.prepare("PRAGMA user_version").get()?.user_version).toBe(4);
 
     const securePermissions =
       process.platform === "win32" || (statSync(path).mode & 0o777) === 0o600;
@@ -90,6 +90,16 @@ describe("SQLite migrations", () => {
           `INSERT INTO vault_items
              (id, workspace_id, kind, label, account, created_at, updated_at)
            VALUES ('item', 'workspace', 'unknown', 'Item', '', '2026-01-01', '2026-01-01')`
+        )
+        .run()
+    ).toThrow(/CHECK constraint failed/u);
+
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO encrypted_secrets
+             (workspace_id, namespace, id, encrypted_value, updated_at)
+           VALUES ('workspace', 'unknown', 'item', 'ciphertext', '2026-01-01')`
         )
         .run()
     ).toThrow(/CHECK constraint failed/u);

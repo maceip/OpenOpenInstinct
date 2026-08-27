@@ -106,6 +106,14 @@ function validateConfiguration() {
       throw new Error(`${name} must be an E.164 phone number.`);
     }
   }
+  if (
+    Boolean(process.env.GOOGLE_CLIENT_ID?.trim()) !==
+    Boolean(process.env.GOOGLE_CLIENT_SECRET?.trim())
+  ) {
+    throw new Error(
+      "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured together."
+    );
+  }
   validateModelProvider();
 
   switch (tunnel) {
