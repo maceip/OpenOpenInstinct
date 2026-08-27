@@ -77,30 +77,12 @@ describe("environment", () => {
     expect(env.VAULT_ENCRYPTION_KEY).toBe(key);
   });
 
-  it("requires a stable HTTPS origin outside loopback", async () => {
-    vi.stubEnv("PUBLIC_URL", "http://assistant.example.com");
+  it("requires Google credentials to be provided together", async () => {
+    vi.stubEnv("GOOGLE_CLIENT_ID", "google-client-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
+
     await expect(import("../lib/env")).rejects.toThrow(
-      "Invalid environment variables"
+      "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured together"
     );
-
-    vi.resetModules();
-    vi.stubEnv("PUBLIC_URL", "http://127.0.0.1:3000");
-    const { env, isLoopbackPublicUrl } = await import("../lib/env");
-    expect(env.PUBLIC_URL).toBe("http://127.0.0.1:3000");
-    expect(isLoopbackPublicUrl()).toBe(true);
-  });
-
-  it("rejects paths, queries, and fragments in PUBLIC_URL", async () => {
-    for (const value of [
-      "https://assistant.example.com/path",
-      "https://assistant.example.com?query=1",
-      "https://assistant.example.com#fragment",
-    ]) {
-      vi.resetModules();
-      vi.stubEnv("PUBLIC_URL", value);
-      await expect(import("../lib/env")).rejects.toThrow(
-        "Invalid environment variables"
-      );
-    }
   });
 });

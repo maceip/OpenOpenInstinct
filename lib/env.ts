@@ -82,6 +82,7 @@ const runtimeEnv = createEnv({
     VAULT_ENCRYPTION_KEY: optionalValue,
   },
   experimental__runtimeEnv: {},
+  emptyStringAsUndefined: true,
 });
 
 if (
