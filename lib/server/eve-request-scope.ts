@@ -1,11 +1,11 @@
 import { accessScopeForUser, type AccessScope } from "../access-scope";
-import { getAuthSession } from "./auth-session";
+import { getAuthSession } from "../runtime/device-auth";
 
 export async function requestScopeFromRequest(
   request: Request
 ): Promise<AccessScope | undefined> {
   const session = await getAuthSession(request.headers);
   return session
-    ? accessScopeForUser(`better-auth:${session.user.id}`)
+    ? accessScopeForUser(`device-auth:${session.user.id}`)
     : undefined;
 }

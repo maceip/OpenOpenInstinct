@@ -26,7 +26,7 @@ function applicationAuth(): AuthFn {
 
     return {
       attributes: { workspaceId: scope.workspaceId },
-      authenticator: "authjs",
+      authenticator: "device-key",
       principalId: scope.userId,
       principalType: "user",
     };

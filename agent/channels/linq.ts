@@ -1,38 +1,14 @@
 /* oxlint-disable typescript/no-unsafe-call, typescript/no-unsafe-member-access -- Eve's Linq adapter exposes the thread through a transitive Chat SDK type; TypeScript still checks this contextual handler. */
-import { connectLinqCredentials } from "@vercel/connect/eve";
 import { defaultLinqAuth, linqChannel } from "eve/channels/linq";
 import { accessScopeForUser } from "@/lib/access-scope";
-import {
-  claimConversationMessageRelay,
-  conversationMessageFromActionResult,
-} from "@/lib/conversation-message";
-import { LINQ_CONNECTOR } from "@/lib/linq";
+import { env } from "@/lib/env";
 import { normalizeAuthPhoneNumber } from "@/lib/phone-number";
-import { findVerifiedAuthUserIdByPhoneNumber } from "@/lib/server/auth-user";
+import { principalIdForInstance } from "@/lib/server/auth-identity";
 
 export default linqChannel({
-  credentials: connectLinqCredentials(LINQ_CONNECTOR),
-  events: {
-    async "action.result"(event, channel, ctx) {
-      const message = conversationMessageFromActionResult(event.result);
-      if (!message || !channel.thread) return;
-      if (
-        !claimConversationMessageRelay(
-          channel.state,
-          ctx.session.turn.id,
-          message
-        )
-      )
-        return;
-
-      await channel.thread.post({ markdown: message });
-    },
-    "message.appended"() {
-      return undefined;
-    },
-    "message.completed"() {
-      return undefined;
-    },
+  credentials: {
+    apiKey: env.LINQ_API_KEY,
+    signingSecret: env.LINQ_WEBHOOK_SECRET,
   },
   async onMessage(_context, message) {
     if (message.author.isBot) return null;
@@ -43,12 +19,9 @@ export default linqChannel({
       typeof authorUserName === "string"
         ? normalizeAuthPhoneNumber(authorUserName)
         : undefined;
-    const verifiedUserId = phoneNumber
-      ? await findVerifiedAuthUserIdByPhoneNumber(phoneNumber)
-      : undefined;
-    const principalId = verifiedUserId
-      ? `better-auth:${verifiedUserId}`
-      : auth.principalId;
+    if (!phoneNumber || phoneNumber !== env.OWNER_PHONE_NUMBER) return null;
+
+    const principalId = `device-auth:${principalIdForInstance()}`;
     const scope = accessScopeForUser(principalId);
     return {
       auth: {

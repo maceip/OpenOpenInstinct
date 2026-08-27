@@ -29,7 +29,8 @@ const managerVaultItemSchema = z.object({
 
 export const managerSnapshotSchema = z.object({
   browser: z.object({ available: z.boolean() }),
-  runtime: z.object({ inference: z.string() }),
+  channels: z.object({ linqPhoneNumber: z.string().optional() }),
+  runtime: z.object({ inference: z.string(), provider: z.string() }),
   secretStore: z.object({
     available: z.boolean(),
     description: z.string(),
@@ -68,10 +69,6 @@ export const managerSetupRequestSchema = z
   .strict();
 
 export const managerMutationSchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("model.select"),
-    modelId: z.string().trim().min(1).max(300),
-  }),
   z.object({ action: z.literal("vault.create"), input: vaultItemInputSchema }),
   z.object({ action: z.literal("vault.delete"), id: z.string().min(1) }),
 ]);
@@ -91,54 +88,4 @@ export function createManagerSetupUrl(
   if (request.label) url.searchParams.set("label", request.label);
   url.searchParams.set("kind", request.kind);
   return url.toString();
-}
-
-export function isAllowedMutationOrigin({
-  forwardedHost,
-  forwardedProto,
-  host,
-  origin,
-  requestUrl,
-}: {
-  readonly forwardedHost: string | null;
-  readonly forwardedProto: string | null;
-  readonly host: string | null;
-  readonly origin: string | null;
-  readonly requestUrl: string;
-}) {
-  if (!origin) return true;
-
-  let parsedOrigin: URL;
-  try {
-    parsedOrigin = new URL(origin);
-  } catch {
-    return false;
-  }
-
-  const request = new URL(requestUrl);
-  const allowedOrigins = new Set([request.origin]);
-  const protocol = firstForwardedValue(forwardedProto) ?? request.protocol;
-
-  for (const candidateHost of [forwardedHost, host]) {
-    const candidate = firstForwardedValue(candidateHost);
-    if (!candidate) continue;
-    try {
-      allowedOrigins.add(
-        new URL(`${normalizeProtocol(protocol)}//${candidate}`).origin
-      );
-    } catch {
-      continue;
-    }
-  }
-
-  return allowedOrigins.has(parsedOrigin.origin);
-}
-
-function firstForwardedValue(value: string | null) {
-  const first = value?.split(",", 1)[0]?.trim();
-  return first?.length ? first : undefined;
-}
-
-function normalizeProtocol(protocol: string) {
-  return protocol.endsWith(":") ? protocol : `${protocol}:`;
 }

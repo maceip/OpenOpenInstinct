@@ -1,11 +1,11 @@
 import { listChats, saveChat } from "@/db/services/chats";
 import { chatListSchema, saveChatSchema } from "@/lib/chat";
-import { isAllowedMutationOrigin } from "@/lib/manager";
 import {
   requireRequestScope,
   UnauthenticatedError,
   unauthorizedResponse,
 } from "@/lib/server/request-scope";
+import { isAllowedMutationOrigin } from "@/lib/server/request-security";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -41,15 +41,7 @@ export async function POST(request: Request) {
 }
 
 function denyCrossOriginMutation(request: Request) {
-  if (
-    !isAllowedMutationOrigin({
-      forwardedHost: request.headers.get("x-forwarded-host"),
-      forwardedProto: request.headers.get("x-forwarded-proto"),
-      host: request.headers.get("host"),
-      origin: request.headers.get("origin"),
-      requestUrl: request.url,
-    })
-  ) {
+  if (!isAllowedMutationOrigin(request.headers)) {
     return Response.json(
       { error: "Cross-origin chat writes are blocked." },
       { status: 403 }

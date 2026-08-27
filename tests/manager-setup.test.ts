@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   createManagerSetupUrl,
-  isAllowedMutationOrigin,
   managerMutationSchema,
   managerSetupRequestSchema,
 } from "../lib/manager";
 import { serializePaymentCard } from "../lib/payment-card";
+import {
+  isAllowedMutationOrigin,
+  isAllowedRequestHost,
+} from "../lib/server/request-security";
 
 describe("self-hosted manager", () => {
   it("builds a vault form URL without accepting a secret", () => {
@@ -19,13 +22,6 @@ describe("self-hosted manager", () => {
     expect(
       managerSetupRequestSchema.safeParse({
         kind: "identity",
-        target: "vault",
-      }).success
-    ).toBe(false);
-    expect(
-      managerSetupRequestSchema.safeParse({
-        email: "person@example.com",
-        kind: "login",
         target: "vault",
       }).success
     ).toBe(false);
@@ -48,25 +44,19 @@ describe("self-hosted manager", () => {
     });
   });
 
-  it("accepts a selected gateway model", () => {
+  it("does not expose removed runtime mutations", () => {
     expect(
       managerMutationSchema.safeParse({
         action: "model.select",
         modelId: "anthropic/claude-sonnet-4.5",
       }).success
-    ).toBe(true);
-  });
-
-  it("does not expose removed runtime mutations", () => {
+    ).toBe(false);
     expect(
       managerMutationSchema.safeParse({
         action: "connection.create",
         input: {
-          account: "qwen3.5:27b",
           endpoint: "http://127.0.0.1:11434/v1",
-          label: "Local model",
           provider: "local-model",
-          secret: "",
         },
       }).success
     ).toBe(false);
@@ -104,21 +94,33 @@ describe("self-hosted manager", () => {
     ).toBe(true);
   });
 
-  it("allows only same-origin writes", () => {
-    const request = {
-      forwardedHost: "assistant.example.com",
-      forwardedProto: "https",
-      host: "internal.example:3000",
+  it("allows writes only from the configured public origin", () => {
+    const headers = new Headers({
+      host: "assistant.example.com",
       origin: "https://assistant.example.com",
-      requestUrl: "http://internal.example:3000/api/manager",
-    };
+      "x-forwarded-host": "attacker-controlled.example",
+    });
 
-    expect(isAllowedMutationOrigin(request)).toBe(true);
+    expect(isAllowedRequestHost(headers)).toBe(true);
+    expect(isAllowedMutationOrigin(headers)).toBe(true);
     expect(
-      isAllowedMutationOrigin({
-        ...request,
-        origin: "https://attacker.example.com",
-      })
+      isAllowedMutationOrigin(
+        new Headers({
+          host: "assistant.example.com",
+          origin: "https://attacker.example.com",
+        })
+      )
+    ).toBe(false);
+    expect(
+      isAllowedRequestHost(
+        new Headers({
+          host: "127.0.0.1:3000",
+          origin: "https://assistant.example.com",
+        })
+      )
+    ).toBe(false);
+    expect(
+      isAllowedMutationOrigin(new Headers({ host: "assistant.example.com" }))
     ).toBe(false);
   });
 });

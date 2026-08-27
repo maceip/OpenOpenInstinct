@@ -6,7 +6,6 @@ export default {
     "agent/extensions/**/*.ts",
     "agent/hooks/**/*.ts",
     "agent/tools/**/*.ts",
-    "db/drizzle.config.ts",
     "evals/**/*.eval.ts",
     "evals/evals.config.ts",
     "taze.config.ts",
@@ -22,8 +21,6 @@ export default {
     // Loaded from generated configuration.
     "next-themes",
     "sonner",
-    // Invoked as a CLI.
-    "vercel",
   ],
   ignoreIssues: {
     // Eve AI Elements and shadcn registry primitives intentionally expose

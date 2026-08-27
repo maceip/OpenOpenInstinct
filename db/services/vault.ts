@@ -1,8 +1,7 @@
-import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AccessScope } from "@/lib/access-scope";
 import { vaultItemKindSchema } from "@/lib/manager";
-import { db, vaultItems } from "@/db";
+import { getDatabase } from "@/db";
 
 const vaultRecordSchema = z.object({
   account: z.string(),
@@ -15,51 +14,64 @@ const vaultRecordSchema = z.object({
 
 type VaultRecord = z.infer<typeof vaultRecordSchema>;
 
-const selection = {
-  account: vaultItems.account,
-  createdAt: vaultItems.createdAt,
-  id: vaultItems.id,
-  kind: vaultItems.kind,
-  label: vaultItems.label,
-  updatedAt: vaultItems.updatedAt,
-};
-
 export async function createVaultItem(scope: AccessScope, record: VaultRecord) {
-  await db.insert(vaultItems).values({
-    ...record,
-    workspaceId: scope.workspaceId,
-  });
-}
-
-export async function listVaultItems(scope: AccessScope) {
-  return vaultRecordSchema
-    .array()
-    .parse(
-      await db
-        .select(selection)
-        .from(vaultItems)
-        .where(eq(vaultItems.workspaceId, scope.workspaceId))
-        .orderBy(desc(vaultItems.updatedAt))
+  getDatabase()
+    .prepare(
+      `INSERT INTO vault_items
+         (id, workspace_id, kind, label, account, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      record.id,
+      scope.workspaceId,
+      record.kind,
+      record.label,
+      record.account,
+      record.createdAt,
+      record.updatedAt
     );
 }
 
+export async function listVaultItems(scope: AccessScope) {
+  return vaultRecordSchema.array().parse(
+    getDatabase()
+      .prepare(
+        `SELECT
+             id,
+             kind,
+             label,
+             account,
+             created_at AS createdAt,
+             updated_at AS updatedAt
+           FROM vault_items
+           WHERE workspace_id = ?
+           ORDER BY updated_at DESC`
+      )
+      .all(scope.workspaceId)
+  );
+}
+
 export async function readVaultItem(scope: AccessScope, id: string) {
-  const rows = await db
-    .select(selection)
-    .from(vaultItems)
-    .where(
-      and(eq(vaultItems.workspaceId, scope.workspaceId), eq(vaultItems.id, id))
-    )
-    .limit(1);
-  return vaultRecordSchema.optional().parse(rows[0]);
+  return vaultRecordSchema.optional().parse(
+    getDatabase()
+      .prepare(
+        `SELECT
+           id,
+           kind,
+           label,
+           account,
+           created_at AS createdAt,
+           updated_at AS updatedAt
+         FROM vault_items
+         WHERE workspace_id = ? AND id = ?`
+      )
+      .get(scope.workspaceId, id)
+  );
 }
 
 export async function deleteVaultItem(scope: AccessScope, id: string) {
-  const rows = await db
-    .delete(vaultItems)
-    .where(
-      and(eq(vaultItems.workspaceId, scope.workspaceId), eq(vaultItems.id, id))
-    )
-    .returning({ id: vaultItems.id });
-  return rows.length > 0;
+  const result = getDatabase()
+    .prepare("DELETE FROM vault_items WHERE workspace_id = ? AND id = ?")
+    .run(scope.workspaceId, id);
+  return result.changes > 0;
 }

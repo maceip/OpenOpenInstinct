@@ -1,5 +1,4 @@
 import { defineAgent, defineDynamic } from "eve";
-import { scopeFromPrincipal } from "@/lib/access-scope";
 import { getModelSettings } from "@/lib/model-config";
 
 export default defineAgent({
@@ -11,7 +10,11 @@ export default defineAgent({
       "step.started": async (_event, ctx) => {
         const caller = ctx.session.auth.current ?? ctx.session.auth.initiator;
         if (!caller) throw new Error("An authenticated user is required.");
-        return (await getModelSettings(scopeFromPrincipal(caller))).modelId;
+        const configured = getModelSettings();
+        return {
+          model: configured.model,
+          modelContextWindowTokens: configured.modelContextWindowTokens,
+        };
       },
     },
   }),

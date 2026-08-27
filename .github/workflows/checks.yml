@@ -3,9 +3,6 @@ name: Checks
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - master
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -13,10 +10,30 @@ concurrency:
 
 jobs:
   checks:
-    name: Checks
+    name: Checks (${{ matrix.os }})
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    env:
+      AI_MODEL: gpt-5-mini
+      AI_PROVIDER: openai
+      AUTH_INSTANCE_ID: ci-instance-000000000000
+      DATABASE_PATH: ${{ runner.temp }}/openopeninstinct.sqlite
+      KERNEL_API_KEY: ci-kernel-key
+      LINQ_API_KEY: ci-linq-key
+      LINQ_PHONE_NUMBER: "+12025550124"
+      LINQ_WEBHOOK_SECRET: ci-linq-webhook-secret
+      OPENAI_API_KEY: ci-openai-key
+      OWNER_PHONE_NUMBER: "+12025550123"
+      PUBLIC_URL: https://openopeninstinct.example
+      VAULT_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -33,5 +50,52 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify SQLite migration and WAL mode
+        run: pnpm db:migrate
+
+      - name: Validate self-host configuration
+        run: pnpm self-host:check -- --tunnel=none
+
       - name: Run checks
         run: pnpm check
+
+  build:
+    name: Production build
+    needs: checks
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    env:
+      AI_MODEL: gpt-5-mini
+      AI_PROVIDER: openai
+      AUTH_INSTANCE_ID: ci-instance-000000000000
+      DATABASE_PATH: ${{ runner.temp }}/openopeninstinct.sqlite
+      KERNEL_API_KEY: ci-kernel-key
+      LINQ_API_KEY: ci-linq-key
+      LINQ_PHONE_NUMBER: "+12025550124"
+      LINQ_WEBHOOK_SECRET: ci-linq-webhook-secret
+      OPENAI_API_KEY: ci-openai-key
+      OWNER_PHONE_NUMBER: "+12025550123"
+      PUBLIC_URL: https://openopeninstinct.example
+      VAULT_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Migrate SQLite database
+        run: pnpm db:migrate
+
+      - name: Build Eve and Next.js
+        run: pnpm build

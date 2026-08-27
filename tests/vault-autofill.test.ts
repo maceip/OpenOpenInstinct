@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createVaultAutofillCode } from "../agent/tools/fill_from_vault";
 import { serializePaymentCard } from "../lib/payment-card";
-import { resolveVaultAutofillValues } from "../lib/vault-autofill";
+import {
+  resolveVaultAutofillValues,
+  VaultAutofillFieldError,
+} from "../lib/vault-autofill";
 
 describe("vault browser autofill", () => {
   it("resolves a login without returning unrequested values", () => {
@@ -40,13 +43,22 @@ describe("vault browser autofill", () => {
   });
 
   it("rejects fields that do not belong to the selected vault item", () => {
-    expect(() =>
+    let caught: unknown;
+    try {
       resolveVaultAutofillValues(
         { account: "ada@example.com", kind: "login" },
         "secret-value",
-        ["card_number"]
-      )
-    ).toThrow("does not provide card_number");
+        ["card_number", "cvc"]
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(VaultAutofillFieldError);
+    expect(caught).toMatchObject({
+      code: "vault_fields_missing",
+      missingFields: ["card_number", "cvc"],
+    });
   });
 
   it("uses Chrome-native card autofill with a verified keyboard fallback", () => {

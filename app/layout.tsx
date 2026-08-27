@@ -19,7 +19,7 @@ export default async function RootLayout({
 }) {
   const session = await getAuthSession(await headers());
   const workspaceId = session?.user?.id
-    ? accessScopeForUser(`better-auth:${session.user.id}`).workspaceId
+    ? accessScopeForUser(`device-auth:${session.user.id}`).workspaceId
     : undefined;
 
   return (

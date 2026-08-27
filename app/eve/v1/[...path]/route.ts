@@ -40,6 +40,9 @@ async function forwardToEve(
     });
     const responseHeaders = new Headers(response.headers);
     responseHeaders.delete("content-length");
+    responseHeaders.delete("connection");
+    responseHeaders.set("Cache-Control", "no-cache, no-store, no-transform");
+    responseHeaders.set("X-Accel-Buffering", "no");
 
     return new Response(response.body, {
       headers: responseHeaders,

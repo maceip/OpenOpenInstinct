@@ -4,7 +4,7 @@ import type { UserContent } from "ai";
 import { isTurnFailureEvent } from "eve/client";
 import { useEveAgent } from "eve/react";
 import { AlertCircleIcon, BrainIcon, PlusIcon, SquareIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -20,6 +20,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import {
   formatChatUsage,
   summarizeChatUsage,
@@ -40,6 +41,9 @@ export function AgentChat({
   readonly sessionless?: boolean;
 }) {
   const [cancellationError, setCancellationError] = useState<string>();
+  const [reconnectError, setReconnectError] = useState<string>();
+  const [reconnecting, setReconnecting] = useState(false);
+  const [traceView, setTraceView] = useState<"imessage" | "trace">("trace");
   const pendingChatTitle = useRef<string | undefined>(undefined);
   const agent = useEveAgent({
     initialSession:
@@ -76,19 +80,62 @@ export function AgentChat({
     lastMessage.parts.every((part) => part.type === "step-start");
   const showPendingThinking =
     isBusy &&
-    (agent.status === "submitted" ||
+    (traceView === "imessage" ||
+      agent.status === "submitted" ||
       lastMessage?.role !== "assistant" ||
       isPendingAssistantShell);
   const turnFailure =
     isBusy || isRestoring ? undefined : getLatestTurnFailure(agent.events);
   const errorMessage =
     cancellationError ??
+    reconnectError ??
     (agent.error ? toErrorMessage(agent.error) : undefined) ??
     turnFailure;
   const hasConversationContent =
     sessionless || !isEmpty || errorMessage !== undefined;
   const showConversationLayout = isRestoring || hasConversationContent;
   const activeSessionId = sessionId ?? agent.session?.sessionId;
+  const agentRef = useRef(agent);
+
+  useEffect(() => {
+    agentRef.current = agent;
+  }, [agent]);
+
+  const reconnect = useCallback(async () => {
+    if (!agentRef.current.session) return;
+    setReconnectError(undefined);
+    setReconnecting(true);
+    try {
+      await agentRef.current.resume();
+    } catch (error) {
+      setReconnectError(toErrorMessage(error));
+    } finally {
+      setReconnecting(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const resumeAfterInterruption = () => {
+      if (
+        agentRef.current.status === "error" &&
+        navigator.onLine &&
+        document.visibilityState === "visible"
+      ) {
+        void reconnect();
+      }
+    };
+    const resumeWhenVisible = () => {
+      if (document.visibilityState === "visible") resumeAfterInterruption();
+    };
+
+    window.addEventListener("online", resumeAfterInterruption);
+    document.addEventListener("visibilitychange", resumeWhenVisible);
+    return () => {
+      window.removeEventListener("online", resumeAfterInterruption);
+      document.removeEventListener("visibilitychange", resumeWhenVisible);
+    };
+  }, [activeSessionId, reconnect]);
   const measuredUsage = useMemo(
     () => summarizeChatUsage(agent.events),
     [agent.events]
@@ -120,6 +167,29 @@ export function AgentChat({
     }
 
     return timestamps;
+  }, [agent.events]);
+  const deliveredAssistantMessages = useMemo(() => {
+    const deliveriesByMessage = new Map<string, Map<number, string[]>>();
+
+    for (const event of agent.events) {
+      if (
+        event.type !== "message.completed" ||
+        event.data.finishReason === "tool-calls" ||
+        !event.data.message?.trim()
+      ) {
+        continue;
+      }
+
+      const messageId = `${event.data.turnId}:assistant`;
+      const deliveries =
+        deliveriesByMessage.get(messageId) ?? new Map<number, string[]>();
+      const messages = deliveries.get(event.data.stepIndex) ?? [];
+      messages.push(event.data.message);
+      deliveries.set(event.data.stepIndex, messages);
+      deliveriesByMessage.set(messageId, deliveries);
+    }
+
+    return deliveriesByMessage;
   }, [agent.events]);
 
   useEffect(() => {
@@ -200,6 +270,8 @@ export function AgentChat({
       {showConversationLayout ? (
         <ChatHeader
           canStartNewChat={activeSessionId !== undefined}
+          onTraceViewChange={setTraceView}
+          traceView={traceView}
           usage={usage}
         />
       ) : null}
@@ -222,6 +294,9 @@ export function AgentChat({
               message.id === lastMessage.id ? null : (
                 <AgentMessage
                   canRespond={!isBusy && !isRestoring}
+                  deliveredAssistantMessages={deliveredAssistantMessages.get(
+                    message.id
+                  )}
                   isStreaming={
                     agent.status === "streaming" &&
                     index === agent.data.messages.length - 1
@@ -233,11 +308,20 @@ export function AgentChat({
                     return agent.respond(inputResponses);
                   }}
                   timestamp={messageTimestamps.get(message.id)}
+                  userVisibleOnly={traceView === "imessage"}
                 />
               )
             )}
             {showPendingThinking ? <PendingThinking /> : null}
-            {errorMessage ? <ErrorMessage message={errorMessage} /> : null}
+            {errorMessage ? (
+              <ErrorMessage
+                message={errorMessage}
+                onReconnect={
+                  agent.error && activeSessionId ? reconnect : undefined
+                }
+                reconnecting={reconnecting}
+              />
+            ) : null}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
@@ -264,7 +348,15 @@ export function AgentChat({
   );
 }
 
-function ErrorMessage({ message }: { readonly message: string }) {
+function ErrorMessage({
+  message,
+  onReconnect,
+  reconnecting,
+}: {
+  readonly message: string;
+  readonly onReconnect?: () => Promise<void>;
+  readonly reconnecting: boolean;
+}) {
   return (
     <Message className="max-w-full" from="assistant">
       <MessageContent>
@@ -276,6 +368,18 @@ function ErrorMessage({ message }: { readonly message: string }) {
           <div>
             <p className="font-medium">Request failed</p>
             <p className="mt-0.5 text-muted-foreground">{message}</p>
+            {onReconnect ? (
+              <Button
+                className="mt-2"
+                disabled={reconnecting}
+                onClick={() => void onReconnect()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {reconnecting ? "Reconnecting…" : "Reconnect stream"}
+              </Button>
+            ) : null}
           </div>
         </div>
       </MessageContent>
@@ -285,9 +389,13 @@ function ErrorMessage({ message }: { readonly message: string }) {
 
 function ChatHeader({
   canStartNewChat,
+  onTraceViewChange,
+  traceView,
   usage,
 }: {
   readonly canStartNewChat: boolean;
+  readonly onTraceViewChange: (view: "imessage" | "trace") => void;
+  readonly traceView: "imessage" | "trace";
   readonly usage: ChatUsage;
 }) {
   return (
@@ -301,19 +409,40 @@ function ChatHeader({
             Usage {formatChatUsage(usage)}
           </span>
         </div>
-        {canStartNewChat ? (
-          <Button
-            aria-label="Start a new chat"
-            className="pointer-events-auto absolute top-2 right-6"
-            onClick={() => window.location.assign("/chat")}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <PlusIcon className="size-4" />
-            <span className="hidden sm:inline">New chat</span>
-          </Button>
-        ) : null}
+        <div className="pointer-events-auto ml-auto flex items-center gap-2">
+          <ButtonGroup aria-label="Trace view">
+            <Button
+              aria-pressed={traceView === "imessage"}
+              onClick={() => onTraceViewChange("imessage")}
+              size="sm"
+              type="button"
+              variant={traceView === "imessage" ? "secondary" : "outline"}
+            >
+              iMessage
+            </Button>
+            <Button
+              aria-pressed={traceView === "trace"}
+              onClick={() => onTraceViewChange("trace")}
+              size="sm"
+              type="button"
+              variant={traceView === "trace" ? "secondary" : "outline"}
+            >
+              Full trace
+            </Button>
+          </ButtonGroup>
+          {canStartNewChat ? (
+            <Button
+              aria-label="Start a new chat"
+              onClick={() => window.location.assign("/chat")}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <PlusIcon className="size-4" />
+              <span className="hidden sm:inline">New chat</span>
+            </Button>
+          ) : null}
+        </div>
       </div>
     </header>
   );

@@ -5,20 +5,31 @@ import { scopeFromPrincipal } from "@/lib/access-scope";
 import { env } from "@/lib/env";
 import { requireOwnedBrowserSession } from "@/lib/server/kernel-browser";
 import { prepareVaultAutofill } from "@/lib/server/vault-autofill";
-import { vaultAutofillRequestSchema } from "@/lib/vault-autofill";
+import {
+  VaultAutofillFieldError,
+  vaultAutofillFieldSchema,
+  vaultAutofillRequestSchema,
+} from "@/lib/vault-autofill";
 
 const outputSchema = z.object({
-  filledFields: z.array(z.string()),
-  origin: z.string(),
-  success: z.literal(true),
+  error: z
+    .object({
+      code: z.literal("vault_fields_missing"),
+      message: z.string(),
+      missingFields: z.array(vaultAutofillFieldSchema),
+    })
+    .optional(),
+  filledFields: z.array(vaultAutofillFieldSchema).optional(),
+  origin: z.string().optional(),
+  success: z.boolean(),
 });
 
 export default defineTool({
   description:
-    "Fill supported saved fields in the active browser directly from an opaque local-vault handle without requesting another approval. Valid field names are username, password, cardholder_name, card_number, expiration, expiration_month, expiration_year, cvc, billing_postal_code, address, phone, identity, and token. Never invent field names. Secret values are read inside trusted device code and entered with Chrome-native card autofill when possible, then verified keyboard entry for unsupported or masked controls. Values and acceptance checks are never returned to the model. Inspect the page first, pass the exact current origin, browser session ID, and precise CSS selectors. Never use this to expose, inspect, or copy a secret.",
+    "Fill supported saved fields in the active browser directly from an opaque local-vault handle without requesting another approval. Valid field names are username, password, cardholder_name, card_number, expiration, expiration_month, expiration_year, cvc, billing_postal_code, address, phone, identity, and token. Never invent field names. Secret values are read inside trusted device code and entered with Chrome-native card autofill when possible, then verified keyboard entry for unsupported or masked controls. Values and acceptance checks are never returned to the model. Inspect the page first, pass the exact current origin, browser session ID, and precise CSS selectors. If success is false, tell the user which missingFields must be added instead of continuing automation. Never use this to expose, inspect, or copy a secret.",
   inputSchema: vaultAutofillRequestSchema,
   outputSchema,
-  async execute(input, context) {
+  async execute(input, context): Promise<z.infer<typeof outputSchema>> {
     const caller =
       context.session.auth.current ?? context.session.auth.initiator;
     if (!caller) throw new Error("An authenticated user is required.");
@@ -29,11 +40,26 @@ export default defineTool({
       );
     }
 
-    const resolved = await prepareVaultAutofill(
-      scope,
-      input.vaultItemId,
-      input.fields.map(({ field }) => field)
-    );
+    let resolved: Awaited<ReturnType<typeof prepareVaultAutofill>>;
+    try {
+      resolved = await prepareVaultAutofill(
+        scope,
+        input.vaultItemId,
+        input.fields.map(({ field }) => field)
+      );
+    } catch (error) {
+      if (error instanceof VaultAutofillFieldError) {
+        return {
+          error: {
+            code: error.code,
+            message: error.message,
+            missingFields: [...error.missingFields],
+          },
+          success: false as const,
+        };
+      }
+      throw error;
+    }
     const fields = input.fields.map((target, index) => {
       const value = resolved.at(index)?.value;
       if (value === undefined) {

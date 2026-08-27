@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createBrowserRunGroup,
   readBrowserRunGroups,
+  recoverInterruptedBrowserRuns,
   saveBrowserRunGroup,
   updateBrowserRunTask,
 } from "../lib/browser-run-store";
@@ -57,5 +58,31 @@ describe("browser run store", () => {
       sessionId: "session_123",
       status: "running",
     });
+  });
+
+  it("marks stale running work as interrupted after sleep or restart", () => {
+    const now = Date.now();
+    const group = createBrowserRunGroup({
+      concurrency: 1,
+      name: "Interrupted run",
+      prompts: ["Open example.com"],
+    });
+    const task = group.tasks[0];
+    if (!task) throw new Error("Expected a browser task.");
+    const running = {
+      ...group,
+      tasks: [
+        {
+          ...task,
+          sessionId: "session_123",
+          startedAt: now - 21 * 60_000,
+          status: "running" as const,
+        },
+      ],
+    };
+
+    expect(
+      recoverInterruptedBrowserRuns([running], now)[0]?.tasks[0]
+    ).toMatchObject({ completedAt: now, status: "interrupted" });
   });
 });
