@@ -10,9 +10,11 @@ const testEnvironment = {
   LINQ_WEBHOOK_SECRET: "test-linq-webhook-secret",
   OPENAI_API_KEY: "test-openai-key",
   PUBLIC_URL: "https://assistant.example.com",
-  SECRET_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString("base64"),
+  VAULT_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString("base64"),
 };
 
 for (const [name, value] of Object.entries(testEnvironment)) {
   vi.stubEnv(name, value);
 }
+
+vi.mock("server-only", () => ({}));

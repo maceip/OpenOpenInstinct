@@ -1,9 +1,11 @@
 /* oxlint-disable eslint/no-restricted-properties -- Standalone launcher validates deployment environment values before use. */
 import { spawn } from "node:child_process";
 import nextEnv from "@next/env";
+import { secureEnvironmentFiles } from "./local-permissions.mjs";
 
 const { loadEnvConfig } = nextEnv;
 
+secureEnvironmentFiles();
 loadEnvConfig(process.cwd());
 
 const options = parseOptions(process.argv.slice(2));
@@ -160,7 +162,10 @@ async function waitForServer(localPort, server) {
     }
     try {
       const response = await fetch(
-        `http://127.0.0.1:${localPort}/eve/v1/health`
+        `http://127.0.0.1:${localPort}/eve/v1/health`,
+        {
+          headers: { Host: publicOrigin.host },
+        }
       );
       if (response.ok) return;
     } catch {

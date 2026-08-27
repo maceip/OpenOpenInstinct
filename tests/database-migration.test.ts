@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -61,6 +61,10 @@ describe("SQLite migrations", () => {
     const securePermissions =
       process.platform === "win32" || (statSync(path).mode & 0o777) === 0o600;
     expect(securePermissions).toBe(true);
+    const insecureSidecars = [`${path}-wal`, `${path}-shm`]
+      .filter((sidecar) => existsSync(sidecar))
+      .filter((sidecar) => (statSync(sidecar).mode & 0o777) !== 0o600);
+    expect(process.platform === "win32" ? [] : insecureSidecars).toEqual([]);
   });
 
   it("enforces foreign keys and strict application constraints", () => {

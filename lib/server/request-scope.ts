@@ -1,3 +1,4 @@
+import "server-only";
 import { headers } from "next/headers";
 import { accessScopeForUser, type AccessScope } from "@/lib/access-scope";
 import { getAuthSession } from "@/lib/server/auth-session";

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { env } from "./env";
 import { paymentCardSecretStringSchema } from "./payment-card";
 
 export const vaultItemKindSchema = z.enum([
@@ -89,22 +88,4 @@ export function createManagerSetupUrl(
   if (request.label) url.searchParams.set("label", request.label);
   url.searchParams.set("kind", request.kind);
   return url.toString();
-}
-
-export function isAllowedMutationOrigin({
-  origin,
-}: {
-  readonly forwardedHost: string | null;
-  readonly forwardedProto: string | null;
-  readonly host: string | null;
-  readonly origin: string | null;
-  readonly requestUrl: string;
-}) {
-  if (!origin) return false;
-
-  try {
-    return new URL(origin).origin === new URL(env.PUBLIC_URL).origin;
-  } catch {
-    return false;
-  }
 }

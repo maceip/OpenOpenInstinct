@@ -67,7 +67,7 @@ function encryptSecret(scope: AccessScope, id: string, value: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv(
     "aes-256-gcm",
-    Buffer.from(env.SECRET_ENCRYPTION_KEY, "base64"),
+    Buffer.from(env.VAULT_ENCRYPTION_KEY, "base64"),
     iv
   );
   cipher.setAAD(secretAad(scope, id));
@@ -91,7 +91,7 @@ function decryptSecret(scope: AccessScope, id: string, value: string) {
 
   const decipher = createDecipheriv(
     "aes-256-gcm",
-    Buffer.from(env.SECRET_ENCRYPTION_KEY, "base64"),
+    Buffer.from(env.VAULT_ENCRYPTION_KEY, "base64"),
     Buffer.from(encodedIv, "base64url")
   );
   decipher.setAAD(secretAad(scope, id));

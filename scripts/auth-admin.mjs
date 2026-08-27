@@ -2,9 +2,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import nextEnv from "@next/env";
 import { openDatabase } from "../db/sqlite.mjs";
+import { secureEnvironmentFiles } from "./local-permissions.mjs";
 
 const { loadEnvConfig } = nextEnv;
 
+secureEnvironmentFiles();
 loadEnvConfig(process.cwd());
 
 const command = process.argv[2] || "pair";

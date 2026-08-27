@@ -1,12 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isAllowedMutationOrigin } from "@/lib/manager";
+import { env } from "@/lib/env";
 import { getAuthSession } from "@/lib/server/auth-session";
+import {
+  isAllowedMutationOrigin,
+  isAllowedRequestHost,
+} from "@/lib/server/request-security";
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  if (!isAllowedRequestHost(request.headers)) {
+    return Response.json(
+      {
+        error:
+          "The request host does not match this OpenOpenInstinct instance.",
+      },
+      { status: 421 }
+    );
+  }
   if (
     isUnsafeMethod(request.method) &&
-    !isAllowedMutationOrigin(originInput(request))
+    !isAllowedMutationOrigin(request.headers)
   ) {
     return Response.json(
       { error: "Cross-origin requests are blocked." },
@@ -23,7 +36,7 @@ export async function proxy(request: NextRequest) {
 
   if (await getAuthSession(request.headers)) return NextResponse.next();
 
-  const signInUrl = new URL("/sign-in", request.url);
+  const signInUrl = new URL("/sign-in", env.PUBLIC_URL);
   signInUrl.searchParams.set(
     "callbackUrl",
     `${request.nextUrl.pathname}${request.nextUrl.search}`
@@ -33,16 +46,6 @@ export async function proxy(request: NextRequest) {
 
 function isUnsafeMethod(method: string) {
   return !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
-}
-
-function originInput(request: NextRequest) {
-  return {
-    forwardedHost: request.headers.get("x-forwarded-host"),
-    forwardedProto: request.headers.get("x-forwarded-proto"),
-    host: request.headers.get("host"),
-    origin: request.headers.get("origin"),
-    requestUrl: request.url,
-  };
 }
 
 export const config = {

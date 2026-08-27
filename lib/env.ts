@@ -4,35 +4,35 @@ import { isE164PhoneNumber } from "./phone-number";
 
 const optionalValue = z
   .string()
-  .transform((value) => (value.trim().length === 0 ? undefined : value))
+  .transform((value) => value.trim() || undefined)
   .optional();
 
-const requiredValue = z
-  .string()
-  .refine((value) => value.trim().length > 0, "Required");
+const requiredValue = z.string().trim().min(1, "Required");
 
-const publicUrlSchema = requiredValue.superRefine((value, context) => {
-  if (!URL.canParse(value)) {
-    context.addIssue({ code: "custom", message: "Must be an absolute URL" });
-    return;
-  }
+const publicUrlSchema = requiredValue
+  .superRefine((value, context) => {
+    if (!URL.canParse(value)) {
+      context.addIssue({ code: "custom", message: "Must be an absolute URL" });
+      return;
+    }
 
-  const url = new URL(value);
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
-    context.addIssue({
-      code: "custom",
-      message: "Must use HTTPS (HTTP is allowed only on loopback)",
-    });
-  }
-  if (url.origin !== value.replace(/\/$/u, "")) {
-    context.addIssue({
-      code: "custom",
-      message:
-        "Must contain only an origin, without a path, query, or fragment",
-    });
-  }
-});
+    const url = new URL(value);
+    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+      context.addIssue({
+        code: "custom",
+        message: "Must use HTTPS (HTTP is allowed only on loopback)",
+      });
+    }
+    if (url.origin !== value.replace(/\/$/u, "")) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Must contain only an origin, without a path, query, or fragment",
+      });
+    }
+  })
+  .transform((value) => new URL(value).origin);
 
 const optionalUrl = optionalValue.refine(
   (value) => value === undefined || URL.canParse(value),
@@ -83,18 +83,28 @@ const runtimeEnv = createEnv({
     OPENAI_API_KEY: optionalValue,
     OWNER_PHONE_NUMBER: optionalPhoneNumber,
     PUBLIC_URL: publicUrlSchema,
-    SECRET_ENCRYPTION_KEY: requiredValue,
+    SECRET_ENCRYPTION_KEY: optionalValue,
+    VAULT_ENCRYPTION_KEY: optionalValue,
   },
   experimental__runtimeEnv: {},
 });
 
-if (Buffer.from(runtimeEnv.SECRET_ENCRYPTION_KEY, "base64").length !== 32) {
-  throw new Error(
-    "SECRET_ENCRYPTION_KEY must be a base64-encoded 32-byte key."
-  );
+const vaultEncryptionKey =
+  runtimeEnv.VAULT_ENCRYPTION_KEY ?? runtimeEnv.SECRET_ENCRYPTION_KEY;
+if (!vaultEncryptionKey) {
+  throw new Error("VAULT_ENCRYPTION_KEY is required.");
+}
+if (
+  !/^[A-Za-z0-9+/_-]+={0,2}$/u.test(vaultEncryptionKey) ||
+  Buffer.from(vaultEncryptionKey, "base64").length !== 32
+) {
+  throw new Error("VAULT_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");
 }
 
-export const env = runtimeEnv;
+export const env = {
+  ...runtimeEnv,
+  VAULT_ENCRYPTION_KEY: vaultEncryptionKey,
+};
 
 export function isLoopbackPublicUrl(value = env.PUBLIC_URL) {
   return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(value).hostname);

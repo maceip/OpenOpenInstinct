@@ -1,4 +1,10 @@
-import { chmodSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+} from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -12,6 +18,7 @@ const MIGRATION_PATTERN = /^(\d{4})_.+\.sqlite\.sql$/u;
  * @returns {DatabaseSync}
  */
 export function openDatabase(configuredPath) {
+  if (process.platform !== "win32") process.umask(0o077);
   const databasePath = resolveDatabasePath(configuredPath);
   if (databasePath !== ":memory:")
     mkdirSync(dirname(databasePath), { recursive: true });
@@ -22,17 +29,22 @@ export function openDatabase(configuredPath) {
   try {
     configureDatabase(database, databasePath);
     applyMigrations(database);
-    if (databasePath !== ":memory:") {
-      try {
-        chmodSync(databasePath, 0o600);
-      } catch (error) {
-        if (process.platform !== "win32") throw error;
-      }
-    }
+    if (databasePath !== ":memory:") secureDatabaseFiles(databasePath);
     return database;
   } catch (error) {
     database.close();
     throw error;
+  }
+}
+
+function secureDatabaseFiles(databasePath) {
+  if (process.platform === "win32") return;
+  for (const path of [
+    databasePath,
+    `${databasePath}-wal`,
+    `${databasePath}-shm`,
+  ]) {
+    if (existsSync(path)) chmodSync(path, 0o600);
   }
 }
 

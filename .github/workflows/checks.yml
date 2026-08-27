@@ -31,7 +31,7 @@ jobs:
       LINQ_WEBHOOK_SECRET: ci-linq-webhook-secret
       OPENAI_API_KEY: ci-openai-key
       PUBLIC_URL: https://openopeninstinct.example
-      SECRET_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      VAULT_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -73,7 +73,7 @@ jobs:
       LINQ_WEBHOOK_SECRET: ci-linq-webhook-secret
       OPENAI_API_KEY: ci-openai-key
       PUBLIC_URL: https://openopeninstinct.example
-      SECRET_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      VAULT_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
