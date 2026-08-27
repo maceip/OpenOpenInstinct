@@ -56,22 +56,17 @@
   "engines": {
     "node": "24.x"
   },
-  "name": "local-vault-assistant",
+  "name": "openopeninstinct",
   "packageManager": "pnpm@11.24.0",
   "scripts": {
     "bench:browser": "eve eval browser",
     "bench:compare": "node --experimental-strip-types scripts/compare-browser-benchmarks.ts",
     "boundaries": "turbo boundaries",
-    "build": "turbo run build:app",
+    "build": "pnpm build:eve && turbo run build:app",
     "build:app": "next build",
-    "build:vercel": "next build",
     "check": "turbo run lint:app types:check:app test:app format:check knip && turbo boundaries",
-    "db:check": "drizzle-kit check --config db/drizzle.config.ts",
-    "db:generate": "drizzle-kit generate --config db/drizzle.config.ts",
-    "db:migrate": "drizzle-kit migrate --config db/drizzle.config.ts",
+    "db:migrate": "node db/migrate.mjs",
     "deps:check": "taze --no-github-actions --no-node-version --fail-on-outdated",
-    "deploy": "turbo run deploy:app",
-    "deploy:app": "eve deploy",
     "dev": "turbo run dev:app",
     "dev:app": "next dev",
     "eval": "eve eval",
@@ -89,7 +84,12 @@
     "types:check:app": "tsc --noEmit -p tsconfig.json",
     "build:eve": "eve build",
     "dev:eve": "eve dev",
-    "start:eve": "eve start"
+    "start:eve": "eve start",
+    "auth:pair": "node scripts/auth-admin.mjs pair",
+    "auth:devices": "node scripts/auth-admin.mjs devices",
+    "auth:revoke": "node scripts/auth-admin.mjs revoke",
+    "self-host": "node scripts/self-host.mjs",
+    "self-host:check": "node scripts/self-host.mjs --check"
   },
   "version": "0.0.0",
   "type": "module"

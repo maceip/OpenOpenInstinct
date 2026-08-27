@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { openDatabase } from "../db/sqlite.mjs";
+
+const { loadEnvConfig } = nextEnv;
 
 loadEnvConfig(process.cwd());
 

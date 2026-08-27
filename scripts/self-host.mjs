@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
+
+const { loadEnvConfig } = nextEnv;
 
 loadEnvConfig(process.cwd());
 
@@ -13,7 +15,9 @@ let stopping = false;
 
 validateConfiguration();
 if (options.check === "true") {
-  console.log(`Self-host configuration is valid (${tunnel}, ${publicOrigin.origin}).`);
+  console.log(
+    `Self-host configuration is valid (${tunnel}, ${publicOrigin.origin}).`
+  );
   process.exit(0);
 }
 
@@ -76,7 +80,9 @@ function validateConfiguration() {
         );
       }
       if (!publicOrigin.hostname.endsWith(".ts.net")) {
-        throw new Error("Tailscale Funnel PUBLIC_URL must use its stable .ts.net name.");
+        throw new Error(
+          "Tailscale Funnel PUBLIC_URL must use its stable .ts.net name."
+        );
       }
       break;
     }
@@ -137,7 +143,10 @@ function runChecked(command, args) {
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) resolve();
-      else reject(new Error(`${command} ${args.join(" ")} failed (${code ?? signal}).`));
+      else
+        reject(
+          new Error(`${command} ${args.join(" ")} failed (${code ?? signal}).`)
+        );
     });
   });
 }
@@ -149,7 +158,9 @@ async function waitForServer(localPort, server) {
       throw new Error("OpenOpenInstinct exited before becoming ready.");
     }
     try {
-      const response = await fetch(`http://127.0.0.1:${localPort}/eve/v1/health`);
+      const response = await fetch(
+        `http://127.0.0.1:${localPort}/eve/v1/health`
+      );
       if (response.ok) return;
     } catch {
       // The local listener is still starting.

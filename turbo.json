@@ -1,35 +1,35 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "globalEnv": [
-    "BETTER_AUTH_SECRET",
-    "BETTER_AUTH_URL",
-    "DATABASE_URL",
+    "AI_API_KEY",
+    "AI_BASE_URL",
+    "AI_MODEL",
+    "AI_MODEL_CONTEXT_WINDOW",
+    "AI_PROVIDER",
+    "AI_PROVIDER_NAME",
+    "ANTHROPIC_API_KEY",
+    "AUTH_INSTANCE_ID",
+    "AUTH_SESSION_TTL_DAYS",
+    "DATABASE_PATH",
     "EVE_NEXT_PRODUCTION_ORIGIN",
-    "HOSTED_SECRET_ENCRYPTION_KEY",
-    "SECRET_ENCRYPTION_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY",
     "KERNEL_API_KEY",
-    "VERCEL_ENV"
+    "LINQ_API_KEY",
+    "LINQ_PHONE_NUMBER",
+    "LINQ_WEBHOOK_SECRET",
+    "OPENAI_API_KEY",
+    "OWNER_PHONE_NUMBER",
+    "PUBLIC_URL",
+    "SECRET_ENCRYPTION_KEY"
   ],
   "tasks": {
     "build:app": {
       "dependsOn": ["^build:app"],
       "outputs": [".next/**", "!.next/cache/**"]
     },
-    "build:vercel": {
-      "dependsOn": ["db:migrate"],
-      "outputs": [".next/**", "!.next/cache/**"]
-    },
-    "db:migrate": {
-      "cache": false,
-      "env": ["DATABASE_URL_UNPOOLED"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"]
-    },
     "dev:app": {
       "cache": false,
       "persistent": true
-    },
-    "deploy:app": {
-      "cache": false
     },
     "format:check": {
       "outputs": []

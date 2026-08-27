@@ -1,5 +1,7 @@
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { openDatabase } from "./sqlite.mjs";
+
+const { loadEnvConfig } = nextEnv;
 
 loadEnvConfig(process.cwd());
 
@@ -9,4 +11,6 @@ const database = openDatabase(databasePath);
 const version = database.prepare("PRAGMA user_version").get()?.user_version;
 database.close();
 
-console.log(`SQLite database is ready at ${databasePath} (schema v${version}).`);
+console.log(
+  `SQLite database is ready at ${databasePath} (schema v${version}).`
+);
