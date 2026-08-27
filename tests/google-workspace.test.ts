@@ -47,12 +47,29 @@ describe("self-hosted Google Workspace connection", () => {
       googleWorkspaceRedirectUri()
     );
 
-    const requests: string[] = [];
+    const requests: {
+      authorization: string | null;
+      body?: string;
+      url: string;
+    }[] = [];
     const fetcher: typeof fetch = async (input, init) => {
-      const url = input.toString();
-      requests.push(url);
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      requests.push({
+        authorization: new Headers(init?.headers).get("authorization"),
+        body:
+          init?.body instanceof URLSearchParams
+            ? init.body.toString()
+            : typeof init?.body === "string"
+              ? init.body
+              : undefined,
+        url,
+      });
       if (url === "https://oauth2.googleapis.com/token") {
-        expect(String(init?.body)).toContain("client_secret=");
         return Response.json({
           access_token: "google-access-token",
           expires_in: 3_600,
@@ -62,9 +79,6 @@ describe("self-hosted Google Workspace connection", () => {
         });
       }
       if (url === "https://openidconnect.googleapis.com/v1/userinfo") {
-        expect(new Headers(init?.headers).get("authorization")).toBe(
-          "Bearer google-access-token"
-        );
         return Response.json({ email: "person@example.com" });
       }
       throw new Error(`Unexpected request: ${url}`);
@@ -76,6 +90,12 @@ describe("self-hosted Google Workspace connection", () => {
       fetcher
     );
     expect(requests).toHaveLength(2);
+    expect(requests[0]?.body).toContain("client_secret=");
+    expect(requests[0]?.url).toBe("https://oauth2.googleapis.com/token");
+    expect(requests[1]?.authorization).toBe("Bearer google-access-token");
+    expect(requests[1]?.url).toBe(
+      "https://openidconnect.googleapis.com/v1/userinfo"
+    );
     await expect(getGoogleWorkspaceConnection(scope)).resolves.toEqual({
       accountLabel: "person@example.com",
       state: "connected",
