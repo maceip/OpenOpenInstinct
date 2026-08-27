@@ -288,6 +288,9 @@ type KernelBrowser =
 
 function browserDescriptor(browser: KernelBrowser) {
   return {
+    // TODO: Replace the signed Kernel URL with a short-lived, authenticated
+    // application URL so it is not persisted in agent tool history.
+    browser_live_view_url: browser.browser_live_view_url ?? undefined,
     session_id: browser.session_id,
     status: browser.deleted_at ? "deleted" : "active",
     viewport: browser.viewport ?? undefined,
@@ -301,6 +304,7 @@ function lifecycleResult(browser: KernelBrowser) {
     next_actions: [
       `Use execute_playwright_code with session_id "${value.session_id}" for deterministic browser automation.`,
       `Use computer_action with session_id "${value.session_id}" for visual browser control.`,
+      "Keep this browser open while human input is pending. Share browser.browser_live_view_url only when the user explicitly asks for browser access.",
       `Use manage_browsers with action "delete" and session_id "${value.session_id}" when finished.`,
     ],
   };

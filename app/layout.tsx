@@ -3,11 +3,13 @@ import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { accessScopeForUser } from "@/lib/access-scope";
+import { env } from "@/lib/env";
 import { getAuthSession } from "@/lib/server/auth-session";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Local Vault Assistant",
+  metadataBase: new URL(env.PUBLIC_URL),
+  title: "OpenOpenInstinct",
   description:
     "A self-hosted personal agent with private credentials and Kernel-powered browser execution.",
 };

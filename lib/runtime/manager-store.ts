@@ -8,6 +8,8 @@ import type { AccessScope } from "../access-scope";
 import { env } from "../env";
 import type { ManagerMutation } from "../manager";
 import { getModelSettings } from "../model-config";
+import { parsePaymentCardSecret, paymentCardBrand } from "../payment-card";
+import { loginAccountHint, parseLoginVaultPayload } from "../vault-payload";
 import { getGoogleWorkspaceConnection } from "./google-workspace";
 import { readManagerVaultItems } from "./manager-vault";
 import {
@@ -64,7 +66,7 @@ async function createVaultItem(
 
   try {
     await insertVaultItem(scope, {
-      account: input.account,
+      account: vaultAccountHint(input),
       createdAt: now,
       id,
       kind: input.kind,
@@ -74,6 +76,29 @@ async function createVaultItem(
   } catch (error) {
     await deleteSecret({ id, namespace: "vault", scope });
     throw error;
+  }
+}
+
+function vaultAccountHint(
+  input: Extract<ManagerMutation, { action: "vault.create" }>["input"]
+) {
+  switch (input.kind) {
+    case "login": {
+      const payload = parseLoginVaultPayload(input.secret);
+      if (!payload)
+        throw new Error("The saved login is incomplete or invalid.");
+      return loginAccountHint(
+        payload.identifier,
+        "origin" in payload ? payload.origin : undefined
+      );
+    }
+    case "payment": {
+      const card = parsePaymentCardSecret(input.secret);
+      return `${paymentCardBrand(card.number)} · •••• ${card.number.slice(-4)}`;
+    }
+    case "address":
+    case "contact":
+      return "";
   }
 }
 

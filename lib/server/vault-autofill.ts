@@ -6,7 +6,8 @@ import { readSecret } from "./secret-store";
 export async function prepareVaultAutofill(
   scope: AccessScope,
   vaultItemId: string,
-  fields: Parameters<typeof resolveVaultAutofillValues>[2]
+  fields: Parameters<typeof resolveVaultAutofillValues>[2],
+  expectedOrigin?: string
 ) {
   const item = await readVaultItem(scope, vaultItemId);
   if (!item) throw new Error("The selected vault item no longer exists.");
@@ -15,5 +16,5 @@ export async function prepareVaultAutofill(
   if (secret === undefined) {
     throw new Error("The selected vault item no longer has a secret value.");
   }
-  return resolveVaultAutofillValues(item, secret, fields);
+  return resolveVaultAutofillValues(item, secret, fields, expectedOrigin);
 }

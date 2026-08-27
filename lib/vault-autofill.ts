@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { VaultItemKind } from "@/lib/manager";
 import { parsePaymentCardSecret } from "@/lib/payment-card";
+import {
+  parseAddressVaultPayload,
+  parseContactVaultPayload,
+  parseLoginVaultPayload,
+} from "./vault-payload";
 
 export const vaultAutofillFieldSchema = z.enum([
   "username",
@@ -13,6 +18,14 @@ export const vaultAutofillFieldSchema = z.enum([
   "cvc",
   "billing_postal_code",
   "address",
+  "address_line1",
+  "address_line2",
+  "address_city",
+  "address_region",
+  "address_postal_code",
+  "address_country",
+  "full_name",
+  "email",
   "phone",
   "identity",
   "token",
@@ -42,9 +55,10 @@ export function resolveVaultAutofillValues(
     readonly kind: VaultItemKind;
   },
   secret: string,
-  fields: readonly z.infer<typeof vaultAutofillFieldSchema>[]
+  fields: readonly z.infer<typeof vaultAutofillFieldSchema>[],
+  expectedOrigin?: string
 ) {
-  const values = vaultValues(item, secret);
+  const values = vaultValues(item, secret, expectedOrigin);
   const missingFields = fields.filter((field) => {
     const value = values.get(field);
     return value === undefined || value.length === 0;
@@ -81,15 +95,34 @@ function vaultValues(
     readonly account: string;
     readonly kind: VaultItemKind;
   },
-  secret: string
+  secret: string,
+  expectedOrigin?: string
 ) {
   const values = new Map<z.infer<typeof vaultAutofillFieldSchema>, string>();
 
   switch (item.kind) {
-    case "login":
-      values.set("username", item.account);
-      values.set("password", secret);
+    case "login": {
+      const payload = parseLoginVaultPayload(secret);
+      if (!payload || !("origin" in payload)) {
+        throw new Error(
+          "This saved login is not assigned to a website. Re-save it before autofill."
+        );
+      }
+      if (expectedOrigin && payload.origin !== expectedOrigin) {
+        throw new Error(`This saved login is restricted to ${payload.origin}.`);
+      }
+      values.set("username", payload.identifier.value);
+      if (payload.identifier.type === "email") {
+        values.set("email", payload.identifier.value);
+      }
+      if (payload.identifier.type === "phone") {
+        values.set("phone", payload.identifier.value);
+      }
+      if (payload.authentication.type === "password") {
+        values.set("password", payload.authentication.password);
+      }
       break;
+    }
     case "payment": {
       const card = parsePaymentCardSecret(secret);
       const month = card.expirationMonth.toString().padStart(2, "0");
@@ -103,9 +136,43 @@ function vaultValues(
       values.set("billing_postal_code", card.billingPostalCode);
       break;
     }
-    case "address":
-      values.set("address", secret);
+    case "address": {
+      const payload = parseAddressVaultPayload(secret);
+      if (!payload) {
+        values.set("address", secret);
+        break;
+      }
+      values.set("full_name", payload.recipientName);
+      values.set("address_line1", payload.line1);
+      if (payload.line2) values.set("address_line2", payload.line2);
+      values.set("address_city", payload.city);
+      values.set("address_region", payload.region);
+      values.set("address_postal_code", payload.postalCode);
+      values.set("address_country", payload.countryCode);
+      values.set(
+        "address",
+        [
+          payload.recipientName,
+          payload.line1,
+          payload.line2,
+          `${payload.city}, ${payload.region} ${payload.postalCode}`,
+          payload.countryCode,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
       break;
+    }
+    case "contact": {
+      const payload = parseContactVaultPayload(secret);
+      if (!payload) {
+        throw new Error("The saved contact is incomplete or invalid.");
+      }
+      if (payload.fullName) values.set("full_name", payload.fullName);
+      if (payload.email) values.set("email", payload.email);
+      if (payload.phone) values.set("phone", payload.phone);
+      break;
+    }
     case "phone":
       values.set("phone", secret);
       break;

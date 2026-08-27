@@ -26,7 +26,7 @@ const outputSchema = z.object({
 
 export default defineTool({
   description:
-    "Fill supported saved fields in the active browser directly from an opaque local-vault handle without requesting another approval. Valid field names are username, password, cardholder_name, card_number, expiration, expiration_month, expiration_year, cvc, billing_postal_code, address, phone, identity, and token. Never invent field names. Secret values are read inside trusted device code and entered with Chrome-native card autofill when possible, then verified keyboard entry for unsupported or masked controls. Values and acceptance checks are never returned to the model. Inspect the page first, pass the exact current origin, browser session ID, and precise CSS selectors. If success is false, tell the user which missingFields must be added instead of continuing automation. Never use this to expose, inspect, or copy a secret.",
+    "Fill supported saved fields in the active browser directly from an opaque local-vault handle without requesting another approval. Valid field names are username, password, cardholder_name, card_number, expiration, expiration_month, expiration_year, cvc, billing_postal_code, address, address_line1, address_line2, address_city, address_region, address_postal_code, address_country, full_name, email, phone, identity, and token. A saved login works only on its bound origin; passwordless login items provide their email or phone identifier but never an OTP. Never invent field names. Secret values are read inside trusted device code and entered with Chrome-native card autofill when possible, then verified keyboard entry for unsupported or masked controls. Values and acceptance checks are never returned to the model. Inspect the page first, pass the exact current origin, browser session ID, and precise CSS selectors. If success is false, tell the user which missingFields must be added instead of continuing automation. Never use this to expose, inspect, or copy a secret.",
   inputSchema: vaultAutofillRequestSchema,
   outputSchema,
   async execute(input, context): Promise<z.infer<typeof outputSchema>> {
@@ -45,7 +45,8 @@ export default defineTool({
       resolved = await prepareVaultAutofill(
         scope,
         input.vaultItemId,
-        input.fields.map(({ field }) => field)
+        input.fields.map(({ field }) => field),
+        input.expectedOrigin
       );
     } catch (error) {
       if (error instanceof VaultAutofillFieldError) {
