@@ -9,7 +9,7 @@ const browserRunTaskSchema = z.object({
   prompt: z.string().min(1),
   sessionId: z.string().optional(),
   startedAt: z.number().nonnegative().optional(),
-  status: z.enum(["queued", "running", "success", "failure"]),
+  status: z.enum(["queued", "running", "success", "failure", "interrupted"]),
   terminalMessage: z.string().optional(),
 });
 
@@ -40,6 +40,7 @@ export type BrowserRunTaskUpdate = Partial<
 >;
 
 export const browserRunStoreEvent = "eve-browser-runs-changed";
+const browserRunStaleAfterMs = 20 * 60_000;
 
 export function readBrowserRunGroups() {
   const serialized = window.localStorage.getItem(workspaceBrowserRunStoreKey());
@@ -47,10 +48,46 @@ export function readBrowserRunGroups() {
 
   try {
     const parsed = browserRunStoreSchema.safeParse(JSON.parse(serialized));
-    return parsed.success ? parsed.data.groups : [];
+    if (!parsed.success) return [];
+    const recovered = recoverInterruptedBrowserRuns(parsed.data.groups);
+    if (recovered !== parsed.data.groups) writeBrowserRunGroups(recovered);
+    return recovered;
   } catch {
     return [];
   }
+}
+
+export function recoverInterruptedBrowserRuns(
+  groups: readonly BrowserRunGroup[],
+  now = Date.now()
+) {
+  const recovered = groups.map((group) => {
+    const tasks = group.tasks.map((task) => {
+      if (
+        task.status !== "running" ||
+        task.startedAt === undefined ||
+        now - task.startedAt < browserRunStaleAfterMs
+      ) {
+        return task;
+      }
+      return {
+        ...task,
+        completedAt: now,
+        durationMs: Math.max(task.durationMs, now - task.startedAt),
+        status: "interrupted" as const,
+        terminalMessage:
+          "The connection was interrupted before completion. Open the session to inspect or continue it.",
+      };
+    });
+    const groupChanged = tasks.some(
+      (task, index) => task !== group.tasks[index]
+    );
+    return groupChanged
+      ? { ...group, tasks, updatedAt: new Date(now).toISOString() }
+      : group;
+  });
+  const changed = recovered.some((group, index) => group !== groups[index]);
+  return changed ? recovered : groups;
 }
 
 export function createBrowserRunGroup({

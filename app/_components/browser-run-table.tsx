@@ -151,7 +151,10 @@ export function summarizeBrowserRunTasks(tasks: readonly BrowserRunTask[]) {
 
   return {
     completed: tasks.filter(
-      (task) => task.status === "success" || task.status === "failure"
+      (task) =>
+        task.status === "success" ||
+        task.status === "failure" ||
+        task.status === "interrupted"
     ).length,
     costComplete: tasks.length > 0 && tasks.every((task) => task.costComplete),
     costUsd:
@@ -179,6 +182,7 @@ function TaskStatusBadge({
 }) {
   const variants = {
     failure: "destructive",
+    interrupted: "secondary",
     queued: "secondary",
     running: "information",
     success: "success",

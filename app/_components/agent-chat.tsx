@@ -4,7 +4,7 @@ import type { UserContent } from "ai";
 import { isTurnFailureEvent } from "eve/client";
 import { useEveAgent } from "eve/react";
 import { AlertCircleIcon, BrainIcon, PlusIcon, SquareIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -40,6 +40,8 @@ export function AgentChat({
   readonly sessionless?: boolean;
 }) {
   const [cancellationError, setCancellationError] = useState<string>();
+  const [reconnectError, setReconnectError] = useState<string>();
+  const [reconnecting, setReconnecting] = useState(false);
   const pendingChatTitle = useRef<string | undefined>(undefined);
   const agent = useEveAgent({
     initialSession:
@@ -83,12 +85,54 @@ export function AgentChat({
     isBusy || isRestoring ? undefined : getLatestTurnFailure(agent.events);
   const errorMessage =
     cancellationError ??
+    reconnectError ??
     (agent.error ? toErrorMessage(agent.error) : undefined) ??
     turnFailure;
   const hasConversationContent =
     sessionless || !isEmpty || errorMessage !== undefined;
   const showConversationLayout = isRestoring || hasConversationContent;
   const activeSessionId = sessionId ?? agent.session?.sessionId;
+  const agentRef = useRef(agent);
+
+  useEffect(() => {
+    agentRef.current = agent;
+  }, [agent]);
+
+  const reconnect = useCallback(async () => {
+    if (!agentRef.current.session) return;
+    setReconnectError(undefined);
+    setReconnecting(true);
+    try {
+      await agentRef.current.resume();
+    } catch (error) {
+      setReconnectError(toErrorMessage(error));
+    } finally {
+      setReconnecting(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const resumeAfterInterruption = () => {
+      if (
+        agentRef.current.status === "error" &&
+        navigator.onLine &&
+        document.visibilityState === "visible"
+      ) {
+        void reconnect();
+      }
+    };
+    const resumeWhenVisible = () => {
+      if (document.visibilityState === "visible") resumeAfterInterruption();
+    };
+
+    window.addEventListener("online", resumeAfterInterruption);
+    document.addEventListener("visibilitychange", resumeWhenVisible);
+    return () => {
+      window.removeEventListener("online", resumeAfterInterruption);
+      document.removeEventListener("visibilitychange", resumeWhenVisible);
+    };
+  }, [activeSessionId, reconnect]);
   const measuredUsage = useMemo(
     () => summarizeChatUsage(agent.events),
     [agent.events]
@@ -237,7 +281,15 @@ export function AgentChat({
               )
             )}
             {showPendingThinking ? <PendingThinking /> : null}
-            {errorMessage ? <ErrorMessage message={errorMessage} /> : null}
+            {errorMessage ? (
+              <ErrorMessage
+                message={errorMessage}
+                onReconnect={
+                  agent.error && activeSessionId ? reconnect : undefined
+                }
+                reconnecting={reconnecting}
+              />
+            ) : null}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
@@ -264,7 +316,15 @@ export function AgentChat({
   );
 }
 
-function ErrorMessage({ message }: { readonly message: string }) {
+function ErrorMessage({
+  message,
+  onReconnect,
+  reconnecting,
+}: {
+  readonly message: string;
+  readonly onReconnect?: () => Promise<void>;
+  readonly reconnecting: boolean;
+}) {
   return (
     <Message className="max-w-full" from="assistant">
       <MessageContent>
@@ -276,6 +336,18 @@ function ErrorMessage({ message }: { readonly message: string }) {
           <div>
             <p className="font-medium">Request failed</p>
             <p className="mt-0.5 text-muted-foreground">{message}</p>
+            {onReconnect ? (
+              <Button
+                className="mt-2"
+                disabled={reconnecting}
+                onClick={() => void onReconnect()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {reconnecting ? "Reconnecting…" : "Reconnect stream"}
+              </Button>
+            ) : null}
           </div>
         </div>
       </MessageContent>

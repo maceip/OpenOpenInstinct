@@ -45,16 +45,35 @@ export function resolveVaultAutofillValues(
   fields: readonly z.infer<typeof vaultAutofillFieldSchema>[]
 ) {
   const values = vaultValues(item, secret);
+  const missingFields = fields.filter((field) => {
+    const value = values.get(field);
+    return value === undefined || value.length === 0;
+  });
+  if (missingFields.length > 0) {
+    throw new VaultAutofillFieldError(item.kind, missingFields);
+  }
 
   return fields.map((field) => {
     const value = values.get(field);
     if (value === undefined || value.length === 0) {
-      throw new Error(
-        `The selected ${item.kind} vault item does not provide ${field}.`
-      );
+      throw new VaultAutofillFieldError(item.kind, [field]);
     }
     return { field, value };
   });
+}
+
+export class VaultAutofillFieldError extends Error {
+  readonly code = "vault_fields_missing";
+
+  constructor(
+    readonly itemKind: VaultItemKind,
+    readonly missingFields: readonly z.infer<typeof vaultAutofillFieldSchema>[]
+  ) {
+    super(
+      `The selected ${itemKind} vault item does not provide: ${missingFields.join(", ")}.`
+    );
+    this.name = "VaultAutofillFieldError";
+  }
 }
 
 function vaultValues(

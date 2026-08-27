@@ -211,6 +211,11 @@ async function runPersistedTask(
         events.push(event);
         projectTaskEvents(events, requestStartedAt, update);
       }
+      if (events.length === 0) {
+        throw new InterruptedTaskError(
+          "The saved session did not return a durable event stream."
+        );
+      }
     } else {
       const { response } = await client.sessions.create({
         message: task.prompt,
@@ -240,12 +245,31 @@ async function runPersistedTask(
       costComplete: metrics.costComplete,
       costUsd: metrics.costUsd,
       durationMs: metrics.durationMs,
-      status: completion?.status ?? "failure",
+      status:
+        completion?.status ??
+        (isConnectionInterruption(error) ? "interrupted" : "failure"),
       terminalMessage: completion?.message ?? toErrorMessage(error),
     });
   } finally {
     if (timeout !== undefined) window.clearTimeout(timeout);
   }
+}
+
+class InterruptedTaskError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InterruptedTaskError";
+  }
+}
+
+function isConnectionInterruption(error: unknown) {
+  return (
+    error instanceof InterruptedTaskError ||
+    (error instanceof Error &&
+      /abort|disconnect|failed to fetch|fetch failed|network|socket|terminated/iu.test(
+        error.message
+      ))
+  );
 }
 
 function projectTaskEvents(
