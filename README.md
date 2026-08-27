@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src=".github/logo.png" alt="OpenInstinct" width="420">
+<img src=".github/logo.jpg" alt="OpenInstinct" width="420">
 
 **A personal iMessage assistant that can use a browser like you.**
 
