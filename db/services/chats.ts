@@ -23,12 +23,10 @@ function toChatSummary(row: z.infer<typeof chatRowSchema>): ChatSummary {
 }
 
 export async function listChats(scope: AccessScope) {
-  const rows = chatRowSchema
-    .array()
-    .parse(
-      getDatabase()
-        .prepare(
-          `SELECT
+  const rows = chatRowSchema.array().parse(
+    getDatabase()
+      .prepare(
+        `SELECT
              session_id AS sessionId,
              title,
              created_at AS createdAt,
@@ -39,9 +37,9 @@ export async function listChats(scope: AccessScope) {
            FROM chats
            WHERE workspace_id = ?
            ORDER BY updated_at DESC`
-        )
-        .all(scope.workspaceId)
-    );
+      )
+      .all(scope.workspaceId)
+  );
   return chatListSchema.parse(rows.map(toChatSummary));
 }
 
@@ -70,9 +68,7 @@ export async function saveChat(scope: AccessScope, chat: SaveChat) {
   const now = new Date().toISOString();
   const database = getDatabase();
   const existing = database
-    .prepare(
-      `SELECT 1 FROM chats WHERE workspace_id = ? AND session_id = ?`
-    )
+    .prepare(`SELECT 1 FROM chats WHERE workspace_id = ? AND session_id = ?`)
     .get(scope.workspaceId, chat.sessionId);
   if (!existing) {
     database
@@ -96,17 +92,13 @@ export async function saveChat(scope: AccessScope, chat: SaveChat) {
   }
 
   const assignments = ["updated_at = ?"];
-  const values: Array<number | string | null> = [now];
+  const values: (number | string | null)[] = [now];
   if (chat.title !== undefined) {
     assignments.push("title = ?");
     values.push(chat.title);
   }
   if (chat.usage !== undefined) {
-    assignments.push(
-      "input_tokens = ?",
-      "output_tokens = ?",
-      "cost_usd = ?"
-    );
+    assignments.push("input_tokens = ?", "output_tokens = ?", "cost_usd = ?");
     values.push(
       chat.usage.inputTokens,
       chat.usage.outputTokens,

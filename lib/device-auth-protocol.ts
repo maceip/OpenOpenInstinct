@@ -5,10 +5,8 @@ const DEVICE_SESSION_DOMAIN = textEncoder.encode(
   "openopeninstinct-device-session-v1\0"
 );
 
-export const opaqueIdSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]{16,128}$/u);
-export const base64UrlSchema = z.string().regex(/^[A-Za-z0-9_-]+$/u);
+const opaqueIdSchema = z.string().regex(/^[A-Za-z0-9_-]{16,128}$/u);
+const base64UrlSchema = z.string().regex(/^[A-Za-z0-9_-]+$/u);
 export const publicKeyJwkSchema = z
   .object({
     crv: z.literal("P-256"),
@@ -35,7 +33,7 @@ export const deviceChallengeRequestSchema = z
 
 export const deviceSessionProofSchema = z
   .object({
-    audience: z.string().url(),
+    audience: z.url(),
     challenge: base64UrlSchema,
     challengeId: opaqueIdSchema,
     deviceId: opaqueIdSchema,
@@ -109,14 +107,18 @@ export function decodeBase64Url(value: string) {
     throw new TypeError("Invalid base64url value.");
   }
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
-  const binary = atob(value.replaceAll("-", "+").replaceAll("_", "/") + padding);
+  const binary = atob(
+    value.replaceAll("-", "+").replaceAll("_", "/") + padding
+  );
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
 function decodeFixedBase64Url(value: string, length: number, name: string) {
   const decoded = decodeBase64Url(value);
   if (decoded.byteLength !== length) {
-    throw new TypeError(`${name} must contain exactly ${length} bytes.`);
+    throw new TypeError(
+      `${name} must contain exactly ${String(length)} bytes.`
+    );
   }
   return decoded;
 }

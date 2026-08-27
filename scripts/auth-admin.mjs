@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-restricted-properties -- Standalone admin bootstrap validates required environment values before use. */
 import { createHash, randomBytes } from "node:crypto";
 import nextEnv from "@next/env";
 import { openDatabase } from "../db/sqlite.mjs";
@@ -119,6 +120,7 @@ function revokeDevice(deviceId) {
          WHERE id = ? AND revoked_at IS NULL`
       )
       .run(now, deviceId);
+    if (result.changes !== 1) throw new Error("Active device not found.");
     database
       .prepare(
         `UPDATE auth_sessions SET revoked_at = ?
@@ -126,7 +128,6 @@ function revokeDevice(deviceId) {
       )
       .run(now, deviceId);
     database.exec("COMMIT");
-    if (result.changes !== 1) throw new Error("Active device not found.");
   } catch (error) {
     database.exec("ROLLBACK");
     throw error;

@@ -18,9 +18,7 @@ const publicUrlSchema = requiredValue.superRefine((value, context) => {
   }
 
   const url = new URL(value);
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(
-    url.hostname
-  );
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
   if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
     context.addIssue({
       code: "custom",
@@ -30,7 +28,8 @@ const publicUrlSchema = requiredValue.superRefine((value, context) => {
   if (url.origin !== value.replace(/\/$/u, "")) {
     context.addIssue({
       code: "custom",
-      message: "Must contain only an origin, without a path, query, or fragment",
+      message:
+        "Must contain only an origin, without a path, query, or fragment",
     });
   }
 });
@@ -98,7 +97,5 @@ if (Buffer.from(runtimeEnv.SECRET_ENCRYPTION_KEY, "base64").length !== 32) {
 export const env = runtimeEnv;
 
 export function isLoopbackPublicUrl(value = env.PUBLIC_URL) {
-  return ["localhost", "127.0.0.1", "[::1]"].includes(
-    new URL(value).hostname
-  );
+  return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(value).hostname);
 }

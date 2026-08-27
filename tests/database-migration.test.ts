@@ -1,186 +1,103 @@
-import { readFile } from "node:fs/promises";
-import { PGlite } from "@electric-sql/pglite";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { openDatabase } from "../db/sqlite.mjs";
 
-const databases: PGlite[] = [];
+const databases: DatabaseSync[] = [];
+const directories: string[] = [];
 
-afterEach(async () => {
-  await Promise.all(databases.splice(0).map((database) => database.close()));
+afterEach(() => {
+  for (const database of databases.splice(0)) database.close();
+  for (const directory of directories.splice(0)) {
+    rmSync(directory, { force: true, recursive: true });
+  }
 });
 
-describe("application database migration", () => {
-  it("creates a validated schema and is idempotent on an empty database", async () => {
-    const database = createDatabase();
+describe("SQLite migrations", () => {
+  it("enables WAL durability and applies every migration idempotently", () => {
+    const path = createDatabasePath();
+    const database = track(openDatabase(path));
 
-    await applyInitialMigration(database);
-    await applyInitialMigration(database);
-
-    const tables = await database.query<{ count: number }>(
-      `SELECT count(*)::int AS count
-       FROM information_schema.tables
-       WHERE table_schema = 'public'
-         AND table_name IN (
-           'workspaces',
-           'workspace_memberships',
-           'vault_items',
-           'settings',
-           'agent_sessions',
-           'browser_sessions',
-           'chats',
-           'encrypted_secrets'
-         )`
+    expect(database.prepare("PRAGMA journal_mode").get()?.journal_mode).toBe(
+      "wal"
     );
-    const pendingConstraints = await pendingConstraintCount(database);
+    expect(database.prepare("PRAGMA foreign_keys").get()?.foreign_keys).toBe(1);
+    expect(database.prepare("PRAGMA busy_timeout").get()?.timeout).toBe(5000);
+    expect(database.prepare("PRAGMA synchronous").get()?.synchronous).toBe(2);
+    expect(database.prepare("PRAGMA user_version").get()?.user_version).toBe(2);
 
-    expect(tables.rows[0]?.count).toBe(8);
-    expect(pendingConstraints).toBe(0);
-  }, 15_000);
+    const expectedTables = [
+      "agent_sessions",
+      "auth_challenges",
+      "auth_devices",
+      "auth_pairings",
+      "auth_principals",
+      "auth_sessions",
+      "browser_sessions",
+      "chats",
+      "encrypted_secrets",
+      "vault_items",
+      "workspace_memberships",
+      "workspaces",
+    ];
+    const tables = database
+      .prepare(
+        `SELECT name, strict
+         FROM pragma_table_list
+         WHERE schema = 'main' AND name NOT LIKE 'sqlite_%'
+         ORDER BY name`
+      )
+      .all();
+    expect(tables.map((row) => row.name)).toEqual(expectedTables);
+    expect(tables.every((row) => row.strict === 1)).toBe(true);
 
-  it("preserves legacy rows while enforcing constraints for new writes", async () => {
-    const database = createDatabase();
-    await database.exec(legacyRuntimeSchema);
-    await database.exec(`
-      INSERT INTO vault_items
-      VALUES (
-        'legacy-item',
-        'orphan-workspace',
-        'legacy-kind',
-        'Legacy',
-        '',
-        '2026-01-01',
-        '2026-01-01'
-      );
-      INSERT INTO chats (
-        session_id,
-        workspace_id,
-        title,
-        created_at,
-        updated_at
-      ) VALUES (
-        'legacy-chat',
-        'orphan-workspace',
-        'Legacy',
-        '2026-01-01',
-        '2026-01-01'
-      );
-      `);
+    database.close();
+    databases.splice(databases.indexOf(database), 1);
+    const reopened = track(openDatabase(path));
+    expect(reopened.prepare("PRAGMA user_version").get()?.user_version).toBe(2);
 
-    await applyInitialMigration(database);
+    const securePermissions =
+      process.platform === "win32" || (statSync(path).mode & 0o777) === 0o600;
+    expect(securePermissions).toBe(true);
+  });
 
-    const vault = await database.query<{ id: string; kind: string }>(
-      "SELECT id, kind FROM vault_items WHERE id = 'legacy-item'"
-    );
-    const chat = await database.query<{
-      costUsd: number | null;
-      inputTokens: number;
-      outputTokens: number;
-    }>(`SELECT
-      cost_usd AS "costUsd",
-      input_tokens AS "inputTokens",
-      output_tokens AS "outputTokens"
-    FROM chats
-    WHERE session_id = 'legacy-chat'`);
+  it("enforces foreign keys and strict application constraints", () => {
+    const database = track(openDatabase(createDatabasePath()));
 
-    expect(vault.rows).toEqual([{ id: "legacy-item", kind: "legacy-kind" }]);
-    expect(chat.rows).toEqual([
-      { costUsd: null, inputTokens: 0, outputTokens: 0 },
-    ]);
-    expect(await pendingConstraintCount(database)).toBe(14);
-    await expect(
-      database.exec(`
-        INSERT INTO vault_items
-        VALUES (
-          'new-invalid',
-          'orphan-workspace',
-          'legacy-kind',
-          'Invalid',
-          '',
-          '2026-01-01',
-          '2026-01-01'
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO workspace_memberships
+             (workspace_id, user_id, role, created_at)
+           VALUES ('missing', 'owner', 'owner', '2026-01-01')`
         )
-        `)
-    ).rejects.toThrow(/constraint/);
-  }, 15_000);
+        .run()
+    ).toThrow(/FOREIGN KEY constraint failed/u);
+
+    database
+      .prepare("INSERT INTO workspaces (id, created_at) VALUES (?, ?)")
+      .run("workspace", "2026-01-01");
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO vault_items
+             (id, workspace_id, kind, label, account, created_at, updated_at)
+           VALUES ('item', 'workspace', 'unknown', 'Item', '', '2026-01-01', '2026-01-01')`
+        )
+        .run()
+    ).toThrow(/CHECK constraint failed/u);
+  });
 });
 
-function createDatabase() {
-  const database = new PGlite();
+function createDatabasePath() {
+  const directory = mkdtempSync(join(tmpdir(), "openopeninstinct-test-"));
+  directories.push(directory);
+  return join(directory, "openopeninstinct.sqlite");
+}
+
+function track(database: DatabaseSync) {
   databases.push(database);
   return database;
 }
-
-async function applyInitialMigration(database: PGlite) {
-  const migration = await readFile(
-    new URL("../db/migrations/0000_fluffy_the_spike.sql", import.meta.url),
-    "utf8"
-  );
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await database.exec(statement);
-  }
-}
-
-async function pendingConstraintCount(database: PGlite) {
-  const result = await database.query<{ count: number }>(
-    `SELECT count(*)::int AS count
-     FROM pg_constraint
-     WHERE NOT convalidated
-       AND connamespace = 'public'::regnamespace`
-  );
-  return result.rows[0]?.count;
-}
-
-const legacyRuntimeSchema = `
-  CREATE TABLE workspaces (
-    id TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE workspace_memberships (
-    workspace_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    role TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    PRIMARY KEY (workspace_id, user_id)
-  );
-  CREATE TABLE vault_items (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    label TEXT NOT NULL,
-    account TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-  CREATE TABLE settings (
-    workspace_id TEXT NOT NULL,
-    key TEXT NOT NULL,
-    value TEXT NOT NULL,
-    PRIMARY KEY (workspace_id, key)
-  );
-  CREATE TABLE agent_sessions (
-    session_id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL,
-    created_by_user_id TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE browser_sessions (
-    session_id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL,
-    created_by_user_id TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE chats (
-    session_id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-  CREATE TABLE encrypted_secrets (
-    workspace_id TEXT NOT NULL,
-    namespace TEXT NOT NULL,
-    id TEXT NOT NULL,
-    encrypted_value TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (workspace_id, namespace, id)
-  );
-`;

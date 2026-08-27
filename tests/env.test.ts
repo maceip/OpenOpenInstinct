@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const requiredEnvironment = {
-  BETTER_AUTH_SECRET: "test-auth-secret",
-  BETTER_AUTH_URL: "https://example.com",
-  DATABASE_URL: "postgresql://user:password@example.com/database",
+  AI_MODEL: "gpt-5-mini",
+  AUTH_INSTANCE_ID: "test-instance-000000000000",
+  DATABASE_PATH: ":memory:",
   KERNEL_API_KEY: "test-kernel-key",
+  LINQ_API_KEY: "test-linq-key",
+  LINQ_WEBHOOK_SECRET: "test-linq-webhook-secret",
+  PUBLIC_URL: "https://assistant.example.com",
   SECRET_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString("base64"),
 };
 
@@ -15,7 +18,6 @@ describe("environment", () => {
     for (const [name, value] of Object.entries(requiredEnvironment)) {
       vi.stubEnv(name, value);
     }
-    vi.stubEnv("HOSTED_SECRET_ENCRYPTION_KEY", "");
   });
 
   afterEach(() => {
@@ -23,11 +25,13 @@ describe("environment", () => {
     vi.unstubAllEnvs();
   });
 
-  it("exports the validated environment", async () => {
+  it("exports the validated self-host environment", async () => {
     const { env } = await import("../lib/env");
 
     expect(env).toMatchObject(requiredEnvironment);
-    expect(env.BROWSER_BENCH_REPETITIONS).toBe(1);
+    expect(env.AI_PROVIDER).toBe("openai");
+    expect(env.AUTH_SESSION_TTL_DAYS).toBe(30);
+    expect(env.DATABASE_PATH).toBe(":memory:");
   });
 
   it.each([
@@ -41,25 +45,45 @@ describe("environment", () => {
   });
 
   it.each([
-    ["BETTER_AUTH_SECRET", "Invalid environment variables"],
-    ["BETTER_AUTH_URL", "Invalid environment variables"],
-    ["DATABASE_URL", "Invalid environment variables"],
-    ["KERNEL_API_KEY", "Invalid environment variables"],
-    ["SECRET_ENCRYPTION_KEY", "SECRET_ENCRYPTION_KEY is required"],
-  ])(
-    "rejects a missing required %s value during import",
-    async (name, errorMessage) => {
-      vi.stubEnv(name, "");
-
-      await expect(import("../lib/env")).rejects.toThrow(errorMessage);
-    }
-  );
-
-  it("rejects a non-Postgres database URL", async () => {
-    vi.stubEnv("DATABASE_URL", "https://example.com/database");
+    "AI_MODEL",
+    "AUTH_INSTANCE_ID",
+    "KERNEL_API_KEY",
+    "LINQ_API_KEY",
+    "LINQ_WEBHOOK_SECRET",
+    "PUBLIC_URL",
+    "SECRET_ENCRYPTION_KEY",
+  ])("rejects a missing required %s value", async (name) => {
+    vi.stubEnv(name, "");
 
     await expect(import("../lib/env")).rejects.toThrow(
       "Invalid environment variables"
     );
+  });
+
+  it("requires a stable HTTPS origin outside loopback", async () => {
+    vi.stubEnv("PUBLIC_URL", "http://assistant.example.com");
+    await expect(import("../lib/env")).rejects.toThrow(
+      "Invalid environment variables"
+    );
+
+    vi.resetModules();
+    vi.stubEnv("PUBLIC_URL", "http://127.0.0.1:3000");
+    const { env, isLoopbackPublicUrl } = await import("../lib/env");
+    expect(env.PUBLIC_URL).toBe("http://127.0.0.1:3000");
+    expect(isLoopbackPublicUrl()).toBe(true);
+  });
+
+  it("rejects paths, queries, and fragments in PUBLIC_URL", async () => {
+    for (const value of [
+      "https://assistant.example.com/path",
+      "https://assistant.example.com?query=1",
+      "https://assistant.example.com#fragment",
+    ]) {
+      vi.resetModules();
+      vi.stubEnv("PUBLIC_URL", value);
+      await expect(import("../lib/env")).rejects.toThrow(
+        "Invalid environment variables"
+      );
+    }
   });
 });

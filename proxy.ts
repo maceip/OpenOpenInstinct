@@ -4,7 +4,10 @@ import { getAuthSession } from "@/lib/server/auth-session";
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  if (isUnsafeMethod(request.method) && !isAllowedMutationOrigin(originInput(request))) {
+  if (
+    isUnsafeMethod(request.method) &&
+    !isAllowedMutationOrigin(originInput(request))
+  ) {
     return Response.json(
       { error: "Cross-origin requests are blocked." },
       { status: 403 }

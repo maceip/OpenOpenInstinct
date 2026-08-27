@@ -127,7 +127,7 @@ export function markSignedOut() {
   window.localStorage.setItem(SIGNED_OUT_KEY, "1");
 }
 
-export function isSignedOut() {
+function isSignedOut() {
   try {
     return window.localStorage.getItem(SIGNED_OUT_KEY) === "1";
   } catch {
@@ -144,11 +144,11 @@ function clearSignedOutMarker() {
 }
 
 async function generateDeviceKey(): Promise<StoredDeviceKey> {
-  const keyPair = (await crypto.subtle.generateKey(
+  const keyPair = await crypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
     false,
     ["sign", "verify"]
-  )) as CryptoKeyPair;
+  );
   const exported = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
   const publicKey = publicKeyJwkSchema.parse({
     crv: exported.crv,
@@ -167,7 +167,7 @@ async function generateDeviceKey(): Promise<StoredDeviceKey> {
 }
 
 function browserDeviceName() {
-  const platform = navigator.platform?.trim();
+  const platform = navigator.platform.trim();
   return platform ? `${platform} browser` : "Browser device";
 }
 
@@ -183,7 +183,9 @@ async function loadDeviceKey() {
 }
 
 async function saveDeviceKey(record: StoredDeviceKey) {
-  await withStore("readwrite", (store) => requestResult(store.put(record, ACTIVE_KEY)));
+  await withStore("readwrite", (store) =>
+    requestResult(store.put(record, ACTIVE_KEY))
+  );
 }
 
 async function withStore<T>(
@@ -204,28 +206,42 @@ async function withStore<T>(
 function openAuthDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, 1);
-    request.onupgradeneeded = () => {
+    request.addEventListener("upgradeneeded", () => {
       if (!request.result.objectStoreNames.contains(STORE_NAME)) {
         request.result.createObjectStore(STORE_NAME);
       }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB failed."));
+    });
+    request.addEventListener("success", () => {
+      resolve(request.result);
+    });
+    request.addEventListener("error", () => {
+      reject(request.error ?? new Error("IndexedDB failed."));
+    });
   });
 }
 
 function requestResult<T>(request: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB failed."));
+    request.addEventListener("success", () => {
+      resolve(request.result);
+    });
+    request.addEventListener("error", () => {
+      reject(request.error ?? new Error("IndexedDB failed."));
+    });
   });
 }
 
 function transactionDone(transaction: IDBTransaction) {
   return new Promise<void>((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB aborted."));
-    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB failed."));
+    transaction.addEventListener("complete", () => {
+      resolve();
+    });
+    transaction.addEventListener("abort", () => {
+      reject(transaction.error ?? new Error("IndexedDB aborted."));
+    });
+    transaction.addEventListener("error", () => {
+      reject(transaction.error ?? new Error("IndexedDB failed."));
+    });
   });
 }
 

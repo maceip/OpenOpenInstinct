@@ -9,12 +9,7 @@ export async function claimSession(scope: AccessScope, sessionId: string) {
        VALUES (?, ?, ?, ?)
        ON CONFLICT(session_id) DO NOTHING`
     )
-    .run(
-      sessionId,
-      scope.workspaceId,
-      scope.userId,
-      new Date().toISOString()
-    );
+    .run(sessionId, scope.workspaceId, scope.userId, new Date().toISOString());
 }
 
 export async function isSessionOwned(scope: AccessScope, sessionId: string) {

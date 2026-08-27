@@ -33,12 +33,10 @@ export async function createVaultItem(scope: AccessScope, record: VaultRecord) {
 }
 
 export async function listVaultItems(scope: AccessScope) {
-  return vaultRecordSchema
-    .array()
-    .parse(
-      getDatabase()
-        .prepare(
-          `SELECT
+  return vaultRecordSchema.array().parse(
+    getDatabase()
+      .prepare(
+        `SELECT
              id,
              kind,
              label,
@@ -48,9 +46,9 @@ export async function listVaultItems(scope: AccessScope) {
            FROM vault_items
            WHERE workspace_id = ?
            ORDER BY updated_at DESC`
-        )
-        .all(scope.workspaceId)
-    );
+      )
+      .all(scope.workspaceId)
+  );
 }
 
 export async function readVaultItem(scope: AccessScope, id: string) {

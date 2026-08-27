@@ -6,7 +6,6 @@ export default {
     "agent/extensions/**/*.ts",
     "agent/hooks/**/*.ts",
     "agent/tools/**/*.ts",
-    "db/migrate.mjs",
     "evals/**/*.eval.ts",
     "evals/evals.config.ts",
     "taze.config.ts",

@@ -102,7 +102,12 @@ export async function getAuthSession(headers: Headers) {
       .get(credentials.id)
   );
   if (!row || Date.parse(row.expiresAt) <= Date.now()) return null;
-  if (!hashesMatch(row.secretHash, hashSecret(SESSION_SECRET_DOMAIN, credentials.secret))) {
+  if (
+    !hashesMatch(
+      row.secretHash,
+      hashSecret(SESSION_SECRET_DOMAIN, credentials.secret)
+    )
+  ) {
     return null;
   }
 
@@ -378,7 +383,7 @@ export class AuthError extends Error {
   }
 }
 
-export function sessionCookieName() {
+function sessionCookieName() {
   return new URL(env.PUBLIC_URL).protocol === "https:"
     ? "__Host-ooi_session"
     : "ooi_session";
@@ -429,7 +434,7 @@ function sessionCookie(session: MintedSession) {
   );
   return `${sessionCookieName()}=${session.id}.${session.secret}; Path=/; ${
     secure ? "Secure; " : ""
-  }HttpOnly; SameSite=Strict; Max-Age=${maxAge}`;
+  }HttpOnly; SameSite=Strict; Max-Age=${String(maxAge)}`;
 }
 
 function clearedSessionCookie() {
@@ -446,8 +451,9 @@ function readSessionCookie(headers: Headers) {
     .map((value) => value.trim())
     .find((value) => value.startsWith(`${sessionCookieName()}=`));
   const value = cookie?.slice(sessionCookieName().length + 1);
-  const match =
-    /^([A-Za-z0-9_-]{16,128})\.([A-Za-z0-9_-]{43})$/u.exec(value ?? "");
+  const match = /^([A-Za-z0-9_-]{16,128})\.([A-Za-z0-9_-]{43})$/u.exec(
+    value ?? ""
+  );
   return match?.[1] && match[2]
     ? { id: match[1], secret: match[2] }
     : undefined;
@@ -482,10 +488,7 @@ function hashSecret(domain: string, encodedSecret: string) {
     return "";
   }
   if (secret.byteLength !== 32) return "";
-  return createHash("sha256")
-    .update(domain)
-    .update(secret)
-    .digest("base64url");
+  return createHash("sha256").update(domain).update(secret).digest("base64url");
 }
 
 function hashesMatch(expected: string, actual: string) {
@@ -505,7 +508,10 @@ function enforceRateLimit(key: string, limit: number, windowMs: number) {
     (timestamp) => timestamp > cutoff
   );
   if (recent.length >= limit) {
-    throw new AuthError("Too many authentication attempts. Try again later.", 429);
+    throw new AuthError(
+      "Too many authentication attempts. Try again later.",
+      429
+    );
   }
   recent.push(now);
   rateBuckets.set(key, recent);
@@ -515,13 +521,7 @@ function cleanupExpiredAuthRows() {
   if (Math.random() >= 0.05) return;
   const now = new Date().toISOString();
   const database = getDatabase();
-  database
-    .prepare("DELETE FROM auth_challenges WHERE expires_at < ?")
-    .run(now);
-  database
-    .prepare("DELETE FROM auth_pairings WHERE expires_at < ?")
-    .run(now);
-  database
-    .prepare("DELETE FROM auth_sessions WHERE expires_at < ?")
-    .run(now);
+  database.prepare("DELETE FROM auth_challenges WHERE expires_at < ?").run(now);
+  database.prepare("DELETE FROM auth_pairings WHERE expires_at < ?").run(now);
+  database.prepare("DELETE FROM auth_sessions WHERE expires_at < ?").run(now);
 }

@@ -1,170 +1,95 @@
-import { readFile } from "node:fs/promises";
-import { getTableConfig } from "drizzle-orm/pg-core";
+import { access, readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import {
-  agentSessions,
-  browserSessions,
-  chats,
-  encryptedSecrets,
-  settings,
-  vaultItems,
-  workspaceMemberships,
-  workspaces,
-} from "../db/schema";
 
-describe("application database schema", () => {
-  it("owns only the existing application tables", () => {
-    expect(
-      [
-        workspaces,
-        workspaceMemberships,
-        vaultItems,
-        settings,
-        agentSessions,
-        browserSessions,
-        chats,
-        encryptedSecrets,
-      ].map((table) => getTableConfig(table).name)
-    ).toEqual([
-      "workspaces",
-      "workspace_memberships",
-      "vault_items",
-      "settings",
-      "agent_sessions",
-      "browser_sessions",
-      "chats",
-      "encrypted_secrets",
-    ]);
+const root = new URL("../", import.meta.url);
+
+describe("SQLite schema policy", () => {
+  it("uses strict SQLite migrations with explicit ownership constraints", async () => {
+    const application = await read("db/migrations/0001_application.sqlite.sql");
+    const authentication = await read(
+      "db/migrations/0002_device_auth.sqlite.sql"
+    );
+
+    expect(application.match(/\) STRICT;/gu)).toHaveLength(7);
+    expect(authentication.match(/\) STRICT;/gu)).toHaveLength(5);
+    expect(application).toContain(
+      "REFERENCES workspace_memberships(workspace_id, user_id) ON DELETE CASCADE"
+    );
+    expect(authentication).toContain(
+      "REFERENCES auth_devices(id) ON DELETE CASCADE"
+    );
+    expect(authentication).toContain(
+      "CREATE UNIQUE INDEX auth_sessions_secret_hash_idx"
+    );
   });
 
-  it("anchors session creators to a membership in the same workspace", () => {
-    for (const table of [agentSessions, browserSessions]) {
-      const foreignKeys = getTableConfig(table).foreignKeys;
-      expect(foreignKeys.map((foreignKey) => foreignKey.getName())).toContain(
-        `${getTableConfig(table).name}_membership_fkey`
-      );
-      const membership = foreignKeys.find((foreignKey) =>
-        foreignKey.getName().endsWith("_membership_fkey")
-      );
-      const reference = membership?.reference();
-      expect(reference?.columns.map((column) => column.name)).toEqual([
-        "workspace_id",
-        "created_by_user_id",
-      ]);
-      expect(reference?.foreignColumns.map((column) => column.name)).toEqual([
-        "workspace_id",
-        "user_id",
-      ]);
-    }
-  });
-
-  it("keeps every workspace-owned table connected to the workspace root", () => {
-    for (const table of [
-      workspaceMemberships,
-      vaultItems,
-      settings,
-      chats,
-      encryptedSecrets,
-    ]) {
-      expect(
-        getTableConfig(table).foreignKeys.some((foreignKey) =>
-          foreignKey.getName().endsWith("_workspace_id_fkey")
-        )
-      ).toBe(true);
-    }
-  });
-});
-
-describe("migration deployment policy", () => {
-  it("orchestrates the native migration through Turbo", async () => {
+  it("runs native migrations and a three-OS CI matrix", async () => {
     const packageManifest = z
       .object({
+        dependencies: z.record(z.string(), z.string()),
         devDependencies: z.record(z.string(), z.string()),
-        scripts: z.object({
-          "db:check": z.string(),
-          "db:generate": z.string(),
-          "build:vercel": z.string(),
-          "db:migrate": z.string(),
-        }),
+        scripts: z.record(z.string(), z.string()),
       })
-      .parse(
-        JSON.parse(
-          await readFile(new URL("../package.json", import.meta.url), "utf8")
-        )
-      );
-    const turbo = z
-      .object({
-        tasks: z.object({
-          "build:vercel": z.object({ dependsOn: z.array(z.string()) }),
-          "db:migrate": z.object({
-            cache: z.boolean(),
-            env: z.array(z.string()),
-          }),
-        }),
-      })
-      .parse(
-        JSON.parse(
-          await readFile(new URL("../turbo.json", import.meta.url), "utf8")
-        )
-      );
-    const vercel = z
-      .object({ buildCommand: z.string() })
-      .parse(
-        JSON.parse(
-          await readFile(new URL("../vercel.json", import.meta.url), "utf8")
-        )
-      );
+      .parse(JSON.parse(await read("package.json")));
+    const workflow = await read(".github/workflows/checks.yml");
+    const turbo = await read("turbo.json");
 
-    expect(packageManifest.scripts["build:vercel"]).toBe("next build");
-    expect(packageManifest.scripts["db:check"]).toBe(
-      "drizzle-kit check --config db/drizzle.config.ts"
+    expect(packageManifest.scripts["db:migrate"]).toBe("node db/migrate.mjs");
+    expect(packageManifest.scripts.build).toContain("pnpm build:eve");
+    expect(packageManifest.scripts["self-host:check"]).toBe(
+      "node scripts/self-host.mjs --check"
     );
-    expect(packageManifest.scripts["db:generate"]).toBe(
-      "drizzle-kit generate --config db/drizzle.config.ts"
-    );
-    expect(packageManifest.scripts["db:migrate"]).toBe(
-      "drizzle-kit migrate --config db/drizzle.config.ts"
-    );
-    expect(packageManifest.devDependencies).toHaveProperty("@next/env");
-    expect(packageManifest.devDependencies).not.toHaveProperty("dotenv-cli");
-    expect(turbo.tasks["build:vercel"].dependsOn).toContain("db:migrate");
-    expect(turbo.tasks["db:migrate"].cache).toBe(false);
-    expect(turbo.tasks["db:migrate"].env).toEqual(["DATABASE_URL_UNPOOLED"]);
-    expect(vercel.buildCommand).toBe("pnpm turbo run build:vercel");
+    for (const dependency of [
+      "@electric-sql/pglite",
+      "@neondatabase/serverless",
+      "@vercel/connect",
+      "@workflow/world-vercel",
+      "better-auth",
+      "drizzle-kit",
+      "drizzle-orm",
+      "pg",
+      "vercel",
+    ]) {
+      expect(packageManifest.dependencies).not.toHaveProperty(dependency);
+      expect(packageManifest.devDependencies).not.toHaveProperty(dependency);
+    }
+    expect(workflow).toContain("ubuntu-latest");
+    expect(workflow).toContain("macos-latest");
+    expect(workflow).toContain("windows-latest");
+    expect(workflow).toContain("pnpm db:migrate");
+    expect(workflow).toContain("pnpm build");
+    expect(turbo.toLowerCase()).not.toContain("vercel");
+    expect(turbo).not.toContain("DATABASE_URL");
   });
 
-  it("adopts existing tables without request-time DDL", async () => {
-    const migration = await readFile(
-      new URL("../db/migrations/0000_fluffy_the_spike.sql", import.meta.url),
-      "utf8"
-    );
-    const services = await Promise.all(
-      [
-        "browsers",
-        "chats",
-        "scope",
-        "secrets",
-        "sessions",
-        "settings",
-        "vault",
-      ].map(
-        async (name) =>
-          await readFile(
-            new URL(`../db/services/${name}.ts`, import.meta.url),
-            "utf8"
-          )
+  it("keeps runtime services free of request-time DDL and removed adapters", async () => {
+    const serviceSources = await Promise.all(
+      ["browsers", "chats", "scope", "secrets", "sessions", "vault"].map(
+        (name) => read(`db/services/${name}.ts`)
       )
     );
+    const runtimeSources = await Promise.all([
+      read("app/api/tasks/route.ts"),
+      read("lib/model-config.ts"),
+      read("agent/channels/linq.ts"),
+    ]);
+    const joined = [...serviceSources, ...runtimeSources].join("\n");
 
-    expect(migration).toContain('CREATE TABLE IF NOT EXISTS "workspaces"');
-    expect(migration).toContain(
-      'ALTER TABLE "chats" ADD COLUMN IF NOT EXISTS "input_tokens"'
+    expect(joined).not.toMatch(/CREATE TABLE|ALTER TABLE/iu);
+    expect(joined).not.toMatch(/postgres|neon|world-vercel|AI Gateway/iu);
+    expect(runtimeSources[0]).toContain("@workflow/world-local");
+    expect(runtimeSources[1]).toContain("@ai-sdk/openai");
+
+    await expect(access(new URL("vercel.json", root))).rejects.toThrow(
+      "ENOENT"
     );
-    expect(migration).toContain(
-      "ON DELETE cascade ON UPDATE no action NOT VALID"
+    await expect(access(new URL("db/drizzle.config.ts", root))).rejects.toThrow(
+      "ENOENT"
     );
-    expect(services.join("\n")).not.toContain("CREATE TABLE");
-    expect(services.join("\n")).not.toContain("initializePostgres");
   });
 });
+
+async function read(path: string) {
+  return await readFile(new URL(path, root), "utf8");
+}

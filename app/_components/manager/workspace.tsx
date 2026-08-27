@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useManager } from "./use-manager";
 
 export function WorkspaceManager() {
-  const { busy, error, mutate, snapshot } = useManager();
+  const { error, snapshot } = useManager();
   const browserReady = snapshot?.browser.available === true;
 
   return (

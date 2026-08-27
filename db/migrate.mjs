@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-restricted-properties -- Standalone migration bootstrap reads one optional, locally controlled path. */
 import nextEnv from "@next/env";
 import { openDatabase } from "./sqlite.mjs";
 

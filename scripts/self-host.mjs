@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/no-restricted-properties -- Standalone launcher validates deployment environment values before use. */
 import { spawn } from "node:child_process";
 import nextEnv from "@next/env";
 

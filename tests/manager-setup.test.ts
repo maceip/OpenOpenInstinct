@@ -22,13 +22,6 @@ describe("self-hosted manager", () => {
         target: "vault",
       }).success
     ).toBe(false);
-    expect(
-      managerSetupRequestSchema.safeParse({
-        email: "person@example.com",
-        kind: "login",
-        target: "vault",
-      }).success
-    ).toBe(false);
 
     const url = new URL(
       createManagerSetupUrl("https://assistant.example.com", {
@@ -48,25 +41,19 @@ describe("self-hosted manager", () => {
     });
   });
 
-  it("accepts a selected gateway model", () => {
+  it("does not expose removed runtime mutations", () => {
     expect(
       managerMutationSchema.safeParse({
         action: "model.select",
         modelId: "anthropic/claude-sonnet-4.5",
       }).success
-    ).toBe(true);
-  });
-
-  it("does not expose removed runtime mutations", () => {
+    ).toBe(false);
     expect(
       managerMutationSchema.safeParse({
         action: "connection.create",
         input: {
-          account: "qwen3.5:27b",
           endpoint: "http://127.0.0.1:11434/v1",
-          label: "Local model",
           provider: "local-model",
-          secret: "",
         },
       }).success
     ).toBe(false);
@@ -104,10 +91,10 @@ describe("self-hosted manager", () => {
     ).toBe(true);
   });
 
-  it("allows only same-origin writes", () => {
+  it("allows writes only from the configured public origin", () => {
     const request = {
-      forwardedHost: "assistant.example.com",
-      forwardedProto: "https",
+      forwardedHost: "attacker-controlled.example",
+      forwardedProto: "http",
       host: "internal.example:3000",
       origin: "https://assistant.example.com",
       requestUrl: "http://internal.example:3000/api/manager",
@@ -120,5 +107,6 @@ describe("self-hosted manager", () => {
         origin: "https://attacker.example.com",
       })
     ).toBe(false);
+    expect(isAllowedMutationOrigin({ ...request, origin: null })).toBe(false);
   });
 });

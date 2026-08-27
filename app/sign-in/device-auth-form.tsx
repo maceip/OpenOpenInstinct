@@ -11,7 +11,11 @@ import {
 
 type State = "connected" | "connecting" | "ready" | "recovering";
 
-export function DeviceAuthForm({ callbackUrl }: { readonly callbackUrl: string }) {
+export function DeviceAuthForm({
+  callbackUrl,
+}: {
+  readonly callbackUrl: string;
+}) {
   const [error, setError] = useState<string>();
   const [handoffUrl, setHandoffUrl] = useState<string>();
   const [pairedDevice, setPairedDevice] = useState(false);
@@ -86,7 +90,7 @@ export function DeviceAuthForm({ callbackUrl }: { readonly callbackUrl: string }
 
   if (state === "connecting" || state === "recovering") {
     return (
-      <div className="mt-6 space-y-3" role="status">
+      <output className="mt-6 block space-y-3">
         <p className="type-body">
           {state === "connecting"
             ? "Connecting this device…"
@@ -95,13 +99,13 @@ export function DeviceAuthForm({ callbackUrl }: { readonly callbackUrl: string }
         <p className="type-supporting-body text-muted-foreground">
           OpenOpenInstinct is creating a private device key and secure session.
         </p>
-      </div>
+      </output>
     );
   }
 
   if (state === "connected") {
     return (
-      <div className="mt-6 space-y-4" role="status">
+      <output className="mt-6 block space-y-4">
         <div className="flex items-center gap-2 text-success">
           <CheckCircle2Icon className="size-5" />
           <p className="type-label">Device connected</p>
@@ -126,7 +130,7 @@ export function DeviceAuthForm({ callbackUrl }: { readonly callbackUrl: string }
         >
           Continue to OpenOpenInstinct
         </Button>
-      </div>
+      </output>
     );
   }
 
@@ -136,7 +140,9 @@ export function DeviceAuthForm({ callbackUrl }: { readonly callbackUrl: string }
         <KeyRoundIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
         <div className="space-y-1">
           <p className="type-label">
-            {pairedDevice ? "Paired device signed out" : "Pairing link required"}
+            {pairedDevice
+              ? "Paired device signed out"
+              : "Pairing link required"}
           </p>
           <p className="type-supporting-body text-muted-foreground">
             {pairedDevice
@@ -149,7 +155,11 @@ export function DeviceAuthForm({ callbackUrl }: { readonly callbackUrl: string }
         <p className="type-supporting-body text-destructive">{error}</p>
       ) : null}
       {pairedDevice ? (
-        <Button className="w-full" onClick={() => void reconnect()} type="button">
+        <Button
+          className="w-full"
+          onClick={() => void reconnect()}
+          type="button"
+        >
           Reconnect this device
         </Button>
       ) : null}

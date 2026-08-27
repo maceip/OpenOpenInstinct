@@ -1,18 +1,83 @@
 import { describe, expect, it } from "vitest";
 import { accessScopeForUser } from "../lib/access-scope";
-import { isFullyAuthenticatedUser } from "../lib/auth-user";
-import { isLocalPhoneAuthBypassEnabled } from "../lib/env";
+import {
+  deviceSessionProofSchema,
+  encodeBase64Url,
+  encodeDeviceSessionProof,
+  parsePairingFragment,
+} from "../lib/device-auth-protocol";
 import { sessionIdFromPath } from "../lib/eve-session-path";
 import { normalizeAuthPhoneNumber } from "../lib/phone-number";
 
-describe("multi-user request identity", () => {
-  it("derives stable personal workspaces without exposing provider ids", () => {
-    const first = accessScopeForUser("better-auth:123");
-    const second = accessScopeForUser("better-auth:456");
+describe("device authentication", () => {
+  it("derives stable personal workspaces without exposing principal ids", () => {
+    const first = accessScopeForUser("device-auth:principal-one");
+    const second = accessScopeForUser("device-auth:principal-two");
 
-    expect(first).toEqual(accessScopeForUser("better-auth:123"));
+    expect(first).toEqual(accessScopeForUser("device-auth:principal-one"));
     expect(first.workspaceId).not.toBe(second.workspaceId);
-    expect(first.workspaceId).not.toContain("better-auth:123");
+    expect(first.workspaceId).not.toContain("principal-one");
+  });
+
+  it("parses a one-use pairing fragment without putting secrets in a query", () => {
+    const secret = encodeBase64Url(new Uint8Array(32).fill(7));
+    const fragment = `#v1.test-instance-000000000000.pairing-000000000000.${secret}`;
+
+    expect(parsePairingFragment(fragment)).toEqual({
+      instanceId: "test-instance-000000000000",
+      pairingId: "pairing-000000000000",
+      secret,
+    });
+    expect(() =>
+      parsePairingFragment(
+        `#v1.test-instance-000000000000.pairing-000000000000.${encodeBase64Url(new Uint8Array(31))}`
+      )
+    ).toThrow("Invalid OpenOpenInstinct pairing secret");
+  });
+
+  it("canonically binds signed proofs to device, instance, and origin", async () => {
+    const proof = deviceSessionProofSchema.parse({
+      audience: "https://assistant.example.com",
+      challenge: encodeBase64Url(new Uint8Array(32).fill(3)),
+      challengeId: "challenge-0000000000",
+      deviceId: "device-00000000000000",
+      expiresAtMs: 1_800_000_000_000,
+      instanceId: "test-instance-000000000000",
+      issuedAtMs: 1_799_999_940_000,
+      keyEpoch: 1,
+      version: 1,
+    });
+    const encoded = encodeDeviceSessionProof(proof);
+    const keyPair = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign", "verify"]
+    );
+    const signature = await crypto.subtle.sign(
+      { hash: "SHA-256", name: "ECDSA" },
+      keyPair.privateKey,
+      encoded
+    );
+
+    expect(
+      await crypto.subtle.verify(
+        { hash: "SHA-256", name: "ECDSA" },
+        keyPair.publicKey,
+        signature,
+        encoded
+      )
+    ).toBe(true);
+    expect(
+      await crypto.subtle.verify(
+        { hash: "SHA-256", name: "ECDSA" },
+        keyPair.publicKey,
+        signature,
+        encodeDeviceSessionProof({
+          ...proof,
+          audience: "https://attacker.example.com",
+        })
+      )
+    ).toBe(false);
   });
 
   it("extracts ownership ids from every Eve session route", () => {
@@ -25,61 +90,9 @@ describe("multi-user request identity", () => {
     expect(sessionIdFromPath("/eve/v1/session")).toBeUndefined();
   });
 
-  it("accepts only users with a verified phone number", () => {
-    expect(
-      isFullyAuthenticatedUser({
-        phoneNumber: "+12025550123",
-        phoneNumberVerified: true,
-      })
-    ).toBe(true);
-    expect(
-      isFullyAuthenticatedUser({
-        phoneNumber: "+12025550123",
-        phoneNumberVerified: false,
-      })
-    ).toBe(false);
-    expect(
-      isFullyAuthenticatedUser({
-        phoneNumberVerified: true,
-      })
-    ).toBe(false);
-  });
-
-  it("defaults phone numbers to the +1 country code", () => {
+  it("normalizes owner-channel phone numbers", () => {
     expect(normalizeAuthPhoneNumber("(202) 555-0123")).toBe("+12025550123");
-    expect(normalizeAuthPhoneNumber("1 202 555 0123")).toBe("+12025550123");
     expect(normalizeAuthPhoneNumber("+44 7911 123456")).toBe("+447911123456");
     expect(normalizeAuthPhoneNumber("not-a-number")).toBeUndefined();
-  });
-
-  it("bypasses phone OTP only during local development", () => {
-    expect(
-      isLocalPhoneAuthBypassEnabled({
-        BETTER_AUTH_URL: "http://localhost:3000",
-        NODE_ENV: "development",
-        VERCEL_ENV: undefined,
-      })
-    ).toBe(true);
-    expect(
-      isLocalPhoneAuthBypassEnabled({
-        BETTER_AUTH_URL: "http://localhost:3000",
-        NODE_ENV: "production",
-        VERCEL_ENV: undefined,
-      })
-    ).toBe(false);
-    expect(
-      isLocalPhoneAuthBypassEnabled({
-        BETTER_AUTH_URL: "http://localhost:3000",
-        NODE_ENV: "development",
-        VERCEL_ENV: "development",
-      })
-    ).toBe(false);
-    expect(
-      isLocalPhoneAuthBypassEnabled({
-        BETTER_AUTH_URL: "https://preview.example.com",
-        NODE_ENV: "development",
-        VERCEL_ENV: undefined,
-      })
-    ).toBe(false);
   });
 });

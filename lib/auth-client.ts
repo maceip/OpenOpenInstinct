@@ -19,9 +19,10 @@ export function useAuthSession() {
     let active = true;
     void fetch("/api/auth/session", { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) return;
+        if (!response.ok) return undefined;
         const session = authSessionSchema.parse(await response.json());
         if (active) setData(session);
+        return session;
       })
       .catch(() => undefined);
     return () => {
