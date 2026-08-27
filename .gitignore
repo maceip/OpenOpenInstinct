@@ -9,5 +9,7 @@ next-env.d.ts
 .output
 .nitro
 dist
+out_pages
+.data
 .DS_Store
 *.tsbuildinfo

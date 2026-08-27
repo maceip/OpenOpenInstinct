@@ -336,10 +336,11 @@ Before contributing:
 ```bash
 pnpm check
 pnpm build
+pnpm build:pages
 ```
 
 GitHub Actions runs migrations and checks on current Ubuntu, macOS, and Windows
-runners, followed by a production build.
+runners, followed by a production build and automated GitHub Pages deployment.
 
 ---
 

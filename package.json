@@ -63,6 +63,7 @@
     "boundaries": "turbo boundaries",
     "build": "pnpm build:eve && turbo run build:app",
     "build:app": "next build",
+    "build:pages": "node scripts/build-pages.mjs",
     "check": "turbo run lint:app types:check:app test:app format:check knip && turbo boundaries",
     "db:migrate": "node db/migrate.mjs",
     "deps:check": "taze --no-github-actions --no-node-version --fail-on-outdated",
