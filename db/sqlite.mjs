@@ -5,8 +5,9 @@ import {
   readFileSync,
   readdirSync,
 } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 
 const MIGRATION_PATTERN = /^(\d{4})_.+\.sqlite\.sql$/u;
 
@@ -44,7 +45,7 @@ function secureDatabaseFiles(databasePath) {
     `${databasePath}-wal`,
     `${databasePath}-shm`,
   ]) {
-    if (existsSync(path)) chmodSync(path, 0o600);
+    if (existsSync(/* turbopackIgnore: true */ path)) chmodSync(path, 0o600);
   }
 }
 
@@ -74,7 +75,7 @@ function applyMigrations(database) {
   const current = Number(
     database.prepare("PRAGMA user_version").get()?.user_version ?? 0
   );
-  const directory = new URL("./migrations/", import.meta.url);
+  const directory = join(dirname(fileURLToPath(import.meta.url)), "migrations");
   const migrations = readdirSync(directory)
     .map((name) => ({ match: MIGRATION_PATTERN.exec(name), name }))
     .filter((entry) => entry.match)
@@ -92,7 +93,7 @@ function applyMigrations(database) {
 
     database.exec("BEGIN EXCLUSIVE");
     try {
-      database.exec(readFileSync(new URL(migration.name, directory), "utf8"));
+      database.exec(readFileSync(join(directory, migration.name), "utf8"));
       database.exec(`PRAGMA user_version = ${migration.version}`);
       database.exec("COMMIT");
     } catch (error) {
