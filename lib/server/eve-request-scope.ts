@@ -1,5 +1,5 @@
 import { accessScopeForUser, type AccessScope } from "../access-scope";
-import { getAuthSession } from "./auth-session";
+import { getAuthSession } from "../runtime/device-auth";
 
 export async function requestScopeFromRequest(
   request: Request
