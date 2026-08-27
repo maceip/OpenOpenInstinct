@@ -44,7 +44,8 @@ function secureDatabaseFiles(databasePath) {
     `${databasePath}-wal`,
     `${databasePath}-shm`,
   ]) {
-    if (existsSync(path)) chmodSync(path, 0o600);
+    if (existsSync(/* turbopackIgnore: true */ path))
+      chmodSync(/* turbopackIgnore: true */ path, 0o600);
   }
 }
 
@@ -74,7 +75,10 @@ function applyMigrations(database) {
   const current = Number(
     database.prepare("PRAGMA user_version").get()?.user_version ?? 0
   );
-  const directory = new URL("./migrations/", import.meta.url);
+  // Self-hosted commands and the Next server both run from the repository root.
+  // Keeping this under process.cwd() gives Turbopack a bounded directory to
+  // trace while remaining stable for systemd, launchd, and Windows services.
+  const directory = resolve(process.cwd(), "db", "migrations");
   const migrations = readdirSync(directory)
     .map((name) => ({ match: MIGRATION_PATTERN.exec(name), name }))
     .filter((entry) => entry.match)
@@ -92,7 +96,7 @@ function applyMigrations(database) {
 
     database.exec("BEGIN EXCLUSIVE");
     try {
-      database.exec(readFileSync(new URL(migration.name, directory), "utf8"));
+      database.exec(readFileSync(resolve(directory, migration.name), "utf8"));
       database.exec(`PRAGMA user_version = ${migration.version}`);
       database.exec("COMMIT");
     } catch (error) {
