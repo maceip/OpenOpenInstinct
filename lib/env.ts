@@ -60,13 +60,6 @@ const runtimeEnv = createEnv({
       "AUTH_INSTANCE_ID must be a 16-128 character base64url identifier"
     ),
     AUTH_SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
-    BROWSER_BENCH_LABEL: z.string().min(1).optional(),
-    BROWSER_BENCH_REPETITIONS: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(20)
-      .default(1),
     DATABASE_PATH: z.string().min(1).default(".data/openopeninstinct.sqlite"),
     EVE_NEXT_PRODUCTION_ORIGIN: optionalValue.refine(
       (value) => value === undefined || URL.canParse(value),
