@@ -26,7 +26,7 @@ describe("SQLite migrations", () => {
     expect(database.prepare("PRAGMA foreign_keys").get()?.foreign_keys).toBe(1);
     expect(database.prepare("PRAGMA busy_timeout").get()?.timeout).toBe(5000);
     expect(database.prepare("PRAGMA synchronous").get()?.synchronous).toBe(2);
-    expect(database.prepare("PRAGMA user_version").get()?.user_version).toBe(2);
+    expect(database.prepare("PRAGMA user_version").get()?.user_version).toBe(3);
 
     const expectedTables = [
       "agent_sessions",
@@ -38,6 +38,7 @@ describe("SQLite migrations", () => {
       "browser_sessions",
       "chats",
       "encrypted_secrets",
+      "instance_state",
       "vault_items",
       "workspace_memberships",
       "workspaces",
@@ -56,7 +57,7 @@ describe("SQLite migrations", () => {
     database.close();
     databases.splice(databases.indexOf(database), 1);
     const reopened = track(openDatabase(path));
-    expect(reopened.prepare("PRAGMA user_version").get()?.user_version).toBe(2);
+    expect(reopened.prepare("PRAGMA user_version").get()?.user_version).toBe(3);
 
     const securePermissions =
       process.platform === "win32" || (statSync(path).mode & 0o777) === 0o600;

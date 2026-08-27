@@ -28,8 +28,10 @@ jobs:
       DATABASE_PATH: ${{ runner.temp }}/openopeninstinct.sqlite
       KERNEL_API_KEY: ci-kernel-key
       LINQ_API_KEY: ci-linq-key
+      LINQ_PHONE_NUMBER: "+12025550124"
       LINQ_WEBHOOK_SECRET: ci-linq-webhook-secret
       OPENAI_API_KEY: ci-openai-key
+      OWNER_PHONE_NUMBER: "+12025550123"
       PUBLIC_URL: https://openopeninstinct.example
       VAULT_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
@@ -70,8 +72,10 @@ jobs:
       DATABASE_PATH: ${{ runner.temp }}/openopeninstinct.sqlite
       KERNEL_API_KEY: ci-kernel-key
       LINQ_API_KEY: ci-linq-key
+      LINQ_PHONE_NUMBER: "+12025550124"
       LINQ_WEBHOOK_SECRET: ci-linq-webhook-secret
       OPENAI_API_KEY: ci-openai-key
+      OWNER_PHONE_NUMBER: "+12025550123"
       PUBLIC_URL: https://openopeninstinct.example
       VAULT_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:

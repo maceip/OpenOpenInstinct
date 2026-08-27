@@ -26,27 +26,38 @@ try {
     case "revoke":
       revokeDevice(options.id || process.argv[3]);
       break;
+    case "sync-origin":
+      await syncPublicOrigin();
+      break;
     default:
-      throw new Error("Usage: auth-admin.mjs pair|devices|revoke [options]");
+      throw new Error(
+        "Usage: auth-admin.mjs pair|devices|revoke|sync-origin [options]"
+      );
   }
 } finally {
   database.close();
 }
 
-async function createPairing() {
-  const publicUrl = requiredEnv("PUBLIC_URL").replace(/\/$/u, "");
+async function createPairing({
+  continueKind = options.continue || "web",
+  continuePath = options.path || "/chat",
+  printLink = true,
+  send = options.send,
+  ttlMinutes = Number(options["ttl-minutes"] || 10),
+} = {}) {
+  const publicUrl = configuredPublicUrl();
   const instanceId = requiredEnv("AUTH_INSTANCE_ID");
-  const continueKind = options.continue || "web";
   if (!new Set(["messages", "web"]).has(continueKind)) {
     throw new Error("--continue must be messages or web.");
   }
-  const continuePath = options.path || "/chat";
   if (!continuePath.startsWith("/") || continuePath.startsWith("//")) {
     throw new Error("--path must be a same-origin absolute path.");
   }
-  const ttlMinutes = Number(options["ttl-minutes"] || 10);
   if (!Number.isInteger(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > 30) {
     throw new Error("--ttl-minutes must be an integer from 1 through 30.");
+  }
+  if (send !== undefined && send !== "linq") {
+    throw new Error("--send must be linq when provided.");
   }
 
   const principalId = principalIdForInstance(instanceId);
@@ -88,13 +99,66 @@ async function createPairing() {
   }
 
   const link = `${publicUrl}/sign-in#v1.${instanceId}.${pairingId}.${secret}`;
-  if (options.send === "linq") await sendPairingThroughLinq(link, ttlMinutes);
+  if (send === "linq") await sendPairingThroughLinq(link, ttlMinutes);
 
-  console.log(`Pairing link (expires ${expiresAt.toISOString()}):`);
-  console.log(link);
-  if (options.send === "linq") {
+  if (printLink) {
+    console.log(`Pairing link (expires ${expiresAt.toISOString()}):`);
+    console.log(link);
+  }
+  if (send === "linq") {
     console.log(`Sent to ${requiredEnv("OWNER_PHONE_NUMBER")} through Linq.`);
   }
+  return { expiresAt, link };
+}
+
+async function syncPublicOrigin() {
+  const publicUrl = configuredPublicUrl();
+  const previous = database
+    .prepare("SELECT value FROM instance_state WHERE key = 'public_url'")
+    .get()?.value;
+  if (previous === publicUrl) {
+    console.log(`Public origin is unchanged (${publicUrl}).`);
+    return;
+  }
+
+  await createPairing({
+    continueKind: "messages",
+    continuePath: "/chat",
+    printLink: false,
+    send: "linq",
+    ttlMinutes: 10,
+  });
+
+  const now = new Date().toISOString();
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database
+      .prepare(
+        `UPDATE auth_pairings
+         SET consumed_at = ?
+         WHERE audience <> ? AND consumed_at IS NULL`
+      )
+      .run(now, publicUrl);
+    database
+      .prepare(
+        `INSERT INTO instance_state (key, value, updated_at)
+         VALUES ('public_url', ?, ?)
+         ON CONFLICT(key) DO UPDATE SET
+           value = excluded.value,
+           updated_at = excluded.updated_at`
+      )
+      .run(publicUrl, now);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+
+  console.log(
+    previous
+      ? `Public origin changed from ${previous} to ${publicUrl}; a one-use recovery link was sent automatically.`
+      : `Public origin initialized at ${publicUrl}; a one-use connection link was sent automatically.`
+  );
 }
 
 function listDevices() {
@@ -193,6 +257,15 @@ function requiredEnv(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required.`);
   return value;
+}
+
+function configuredPublicUrl() {
+  const configured = requiredEnv("PUBLIC_URL");
+  const parsed = new URL(configured);
+  if (parsed.origin !== configured.replace(/\/$/u, "")) {
+    throw new Error("PUBLIC_URL must contain only the public origin.");
+  }
+  return parsed.origin;
 }
 
 function parseOptions(values) {

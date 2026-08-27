@@ -1,56 +1,96 @@
-# Application database
+# Local SQLite database
 
-This directory owns the eight application tables and their domain query
-services.
-Better Auth continues to own and migrate its tables independently in
-`auth.ts`.
+OpenOpenInstinct uses one native SQLite database for application state,
+authentication, device enrollment, public-origin continuity, and encrypted vault
+records. No external database server or ORM migration service is required.
 
-- `schema/` is the Drizzle source of truth.
-- `index.ts` exports the Drizzle client and schema using pooled `DATABASE_URL`
-  for request-time access.
-- `services/` owns workspace-scoped application queries by domain.
-- `drizzle.config.ts` uses `DATABASE_URL_UNPOOLED` for migration commands.
-- `migrations/` is generated history. Run `pnpm db:generate` after changing the
-  schema and commit the SQL, snapshot, and journal together.
+## Runtime contract
 
-Run `pnpm db:migrate` explicitly for local or operator-managed environments.
-Vercel runs the uncached Turbo `db:migrate` task before `build:vercel`. The
-package command delegates directly to `drizzle-kit migrate`. Migration commands
-use `@next/env` to load the same root `.env*` precedence as Next.js; an injected
-`DATABASE_URL_UNPOOLED` remains authoritative. Each Vercel environment must
-therefore provide the direct URL for its intended database. Migrations must
-remain backward compatible with the previously deployed application while a
-rollout is in progress.
+- `sqlite.mjs` resolves `DATABASE_PATH` to an absolute path, creates its parent
+  directory, applies durability/security pragmas, and runs pending migrations.
+- `index.ts` owns the process-wide `node:sqlite` connection used by services.
+- `services/` owns parameterized, workspace-scoped domain queries.
+- `migrations/*.sqlite.sql` is the ordered schema history.
+- `migrate.mjs` is the explicit operator/CI entry point used by
+  `pnpm db:migrate`.
 
-## Adopting an existing database
+The service launcher runs migrations before it builds or starts the application.
+Opening the database also checks the schema version, which keeps direct
+development startup safe. A single long-lived host process is the supported
+deployment model; serverless filesystems and concurrent cold-start migrations
+are not.
 
-Migration `0000` supports both an empty database and one containing the tables
-formerly created at request time. It preserves the existing text timestamp and
-identifier representation, adds missing chat usage columns with safe defaults,
-and installs new foreign keys and checks as `NOT VALID` when a table already
-exists. PostgreSQL enforces those constraints for new writes immediately without
-rejecting the deployment because of an unknown historical orphan.
+## Migrations
 
-Before validating historical rows, back up the database and audit the pending
-constraints:
+Migration filenames begin with a four-digit version:
 
-```sql
-SELECT conrelid::regclass AS table_name, conname
-FROM pg_constraint
-WHERE NOT convalidated
-  AND connamespace = 'public'::regnamespace
-ORDER BY 1, 2;
+```text
+0001_application.sqlite.sql
+0002_device_auth.sqlite.sql
+0003_instance_state.sqlite.sql
 ```
 
-Repair any reported ownership or value violations, then validate each listed
-constraint in a controlled maintenance step:
+Versions must be contiguous. Each pending file runs inside `BEGIN EXCLUSIVE`;
+`PRAGMA user_version` advances only in the same successful transaction.
+Migrations must be forward-only and committed with the code that uses them.
 
-```sql
-ALTER TABLE <table_name> VALIDATE CONSTRAINT <constraint_name>;
+To migrate explicitly:
+
+```bash
+pnpm db:migrate
 ```
 
-Validation is intentionally not automatic in the first deployment because it
-scans existing rows and could turn unknown legacy drift into a production build
-failure. Once all constraints are validated, their definitions already match
-the canonical Drizzle schema; no data rewrite or Better Auth migration is
-required.
+Do not edit a migration after it has shipped. Add the next numbered SQLite
+migration instead.
+
+## Concurrency and durability
+
+Each file-backed connection requires WAL and configures:
+
+```sql
+PRAGMA journal_mode = WAL;
+PRAGMA busy_timeout = 5000;
+PRAGMA synchronous = FULL;
+PRAGMA foreign_keys = ON;
+PRAGMA trusted_schema = OFF;
+PRAGMA secure_delete = ON;
+```
+
+WAL permits concurrent readers while serializing the application's small number
+of writes. The five-second busy timeout absorbs brief overlap between chat,
+browser-session, vault, and authentication updates. `synchronous = FULL`
+prioritizes local durability over the marginal write-speed benefit of
+`NORMAL`.
+
+Tables are `STRICT`, foreign keys are enabled, ownership relationships cascade
+deliberately, and service queries use bound parameters. Application services
+must not issue request-time DDL.
+
+## Secrets and permissions
+
+`encrypted_secrets.encrypted_value` contains AES-256-GCM envelopes, not raw
+credentials. The authenticated data binds each ciphertext to its workspace,
+namespace, and item ID. The encryption key lives in
+`VAULT_ENCRYPTION_KEY`, never in SQLite.
+
+On POSIX hosts the process uses a restrictive umask and applies mode `0600` to
+the database, WAL/SHM files, and local environment files. Windows deployments
+should use a dedicated user profile and private NTFS ACL. These controls do not
+isolate data from another process running as the same OS user.
+
+## Backup and restore
+
+For a consistent simple backup:
+
+1. Stop `pnpm self-host`.
+2. Copy the configured SQLite file.
+3. Copy the environment file separately.
+4. Keep an independent backup of `VAULT_ENCRYPTION_KEY`.
+
+Restore all three together before starting the service. If the encryption key is
+missing or different, existing vault ciphertext is intentionally
+unrecoverable.
+
+The public origin stored in `instance_state` is continuity metadata. If
+`PUBLIC_URL` differs on the next healthy startup, the launcher sends a new
+one-use Linq pairing link before recording the replacement origin.

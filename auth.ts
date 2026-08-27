@@ -25,6 +25,7 @@ const CHALLENGE_SECRET_DOMAIN = "openopeninstinct-challenge-v1\0";
 const CHALLENGE_TTL_MS = 2 * 60 * 1000;
 const MAX_CLOCK_SKEW_MS = 60 * 1000;
 const LAST_SEEN_WRITE_INTERVAL_MS = 5 * 60 * 1000;
+const RATE_BUCKET_STALE_MS = 5 * 60 * 1000;
 
 const sessionRowSchema = z.object({
   deviceId: z.string(),
@@ -78,6 +79,7 @@ interface MintedSession {
 }
 
 const rateBuckets = new Map<string, number[]>();
+let rateLimitChecks = 0;
 
 export async function getAuthSession(headers: Headers) {
   const credentials = readSessionCookie(headers);
@@ -208,8 +210,8 @@ export function pairDevice(input: unknown): PairResult {
 
 export function createDeviceChallenge(input: unknown) {
   const request = deviceChallengeRequestSchema.parse(input);
-  enforceRateLimit(`challenge:${request.deviceId}`, 12, 60_000);
   enforceRateLimit("challenge:global", 120, 60_000);
+  enforceRateLimit(`challenge:${request.deviceId}`, 12, 60_000);
 
   const device = z
     .object({ keyEpoch: z.number().int().positive() })
@@ -259,6 +261,7 @@ export function createDeviceChallenge(input: unknown) {
 export function redeemDevice(input: unknown): SessionResult {
   const request = redeemDeviceRequestSchema.parse(input);
   const { proof } = request;
+  enforceRateLimit("redeem:global", 120, 60_000);
   enforceRateLimit(`redeem:${proof.deviceId}`, 12, 60_000);
   const signature = decodeBase64Url(request.signature);
   if (signature.byteLength !== 64) {
@@ -504,6 +507,8 @@ function randomId() {
 
 function enforceRateLimit(key: string, limit: number, windowMs: number) {
   const now = Date.now();
+  rateLimitChecks += 1;
+  if (rateLimitChecks % 128 === 0) pruneRateBuckets(now);
   const cutoff = now - windowMs;
   const recent = (rateBuckets.get(key) ?? []).filter(
     (timestamp) => timestamp > cutoff
@@ -516,6 +521,13 @@ function enforceRateLimit(key: string, limit: number, windowMs: number) {
   }
   recent.push(now);
   rateBuckets.set(key, recent);
+}
+
+function pruneRateBuckets(now: number) {
+  const cutoff = now - RATE_BUCKET_STALE_MS;
+  for (const [key, timestamps] of rateBuckets) {
+    if ((timestamps.at(-1) ?? 0) <= cutoff) rateBuckets.delete(key);
+  }
 }
 
 function cleanupExpiredAuthRows() {

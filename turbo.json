@@ -34,7 +34,7 @@
   "tasks": {
     "build:app": {
       "dependsOn": ["^build:app"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts"]
     },
     "dev:app": {
       "cache": false,
@@ -56,7 +56,11 @@
     "test:app": {
       "outputs": []
     },
+    "types:generate": {
+      "outputs": [".next/types/**", "next-env.d.ts"]
+    },
     "types:check:app": {
+      "dependsOn": ["types:generate"],
       "outputs": ["*.tsbuildinfo"]
     }
   }

@@ -51,6 +51,10 @@ const server = spawnManaged(
 await waitForServer(port, server);
 
 const tunnelProcess = startTunnel(tunnel, port);
+if (!isLoopbackOrigin()) {
+  await waitForPublicServer(tunnelProcess);
+  await runChecked(pnpmCommand(), ["auth:sync-origin"]);
+}
 console.log(`OpenOpenInstinct is available at ${publicOrigin.origin}.`);
 
 const exitCode = await waitForAnyExit(
@@ -65,11 +69,40 @@ function validateConfiguration() {
   if (publicOrigin.origin !== publicUrl.replace(/\/$/u, "")) {
     throw new Error("PUBLIC_URL must contain only the stable public origin.");
   }
+  if (publicOrigin.protocol !== "https:" && !isLoopbackOrigin()) {
+    throw new Error("PUBLIC_URL must use HTTPS except for loopback testing.");
+  }
   if (publicOrigin.hostname.endsWith(".trycloudflare.com")) {
     throw new Error(
       "Cloudflare Quick Tunnel URLs are ephemeral and unsupported for device authentication."
     );
   }
+  if (!/^[A-Za-z0-9_-]{16,128}$/u.test(requiredEnv("AUTH_INSTANCE_ID"))) {
+    throw new Error("AUTH_INSTANCE_ID must be a 16-128 character base64url value.");
+  }
+  const vaultKey =
+    process.env.VAULT_ENCRYPTION_KEY?.trim() ||
+    process.env.SECRET_ENCRYPTION_KEY?.trim();
+  if (
+    !vaultKey ||
+    !/^[A-Za-z0-9+/_-]+={0,2}$/u.test(vaultKey) ||
+    Buffer.from(vaultKey, "base64").length !== 32
+  ) {
+    throw new Error("VAULT_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");
+  }
+  for (const name of [
+    "KERNEL_API_KEY",
+    "LINQ_API_KEY",
+    "LINQ_WEBHOOK_SECRET",
+  ]) {
+    requiredEnv(name);
+  }
+  for (const name of ["LINQ_PHONE_NUMBER", "OWNER_PHONE_NUMBER"]) {
+    if (!/^\+[1-9]\d{7,14}$/u.test(requiredEnv(name))) {
+      throw new Error(`${name} must be an E.164 phone number.`);
+    }
+  }
+  validateModelProvider();
 
   switch (tunnel) {
     case "cloudflare":
@@ -96,6 +129,29 @@ function validateConfiguration() {
       break;
     default:
       throw new Error("--tunnel must be cloudflare, tailscale, zrok, or none.");
+  }
+}
+
+function validateModelProvider() {
+  requiredEnv("AI_MODEL");
+  switch (process.env.AI_PROVIDER || "openai") {
+    case "openai":
+      requiredEnv("OPENAI_API_KEY");
+      break;
+    case "anthropic":
+      requiredEnv("ANTHROPIC_API_KEY");
+      break;
+    case "google":
+      requiredEnv("GOOGLE_GENERATIVE_AI_API_KEY");
+      break;
+    case "openai-compatible":
+      requiredEnv("AI_API_KEY");
+      requiredEnv("AI_BASE_URL");
+      break;
+    default:
+      throw new Error(
+        "AI_PROVIDER must be openai, anthropic, google, or openai-compatible."
+      );
   }
 }
 
@@ -174,6 +230,35 @@ async function waitForServer(localPort, server) {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error("OpenOpenInstinct did not become ready within 60 seconds.");
+}
+
+async function waitForPublicServer(tunnelProcess) {
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    if (tunnelProcess && tunnelProcess.exitCode !== null) {
+      throw new Error("The tunnel exited before the public service was ready.");
+    }
+    try {
+      const response = await fetch(
+        new URL("/eve/v1/health", publicOrigin),
+        {
+          cache: "no-store",
+          redirect: "error",
+        }
+      );
+      if (response.ok) return;
+    } catch {
+      // DNS, TLS, or the tunnel may still be converging.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(
+    `The public service at ${publicOrigin.origin} did not become ready within 90 seconds.`
+  );
+}
+
+function isLoopbackOrigin() {
+  return ["localhost", "127.0.0.1", "[::1]"].includes(publicOrigin.hostname);
 }
 
 function waitForAnyExit(processes) {

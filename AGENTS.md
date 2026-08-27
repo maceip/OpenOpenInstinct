@@ -39,16 +39,18 @@ eve add <item> --non-interactive
 
 Exit code 0 means setup completed, 1 failed, and 2 needs an answer or a prerequisite. On exit 2, run the `next.command` from the final NDJSON event. For a non-secret question, replace its `<JSON value>` answer placeholder with the answer you collected; string values need JSON quotes. Never pass a secret in `--answer`. See `docs/install-integrations.mdx` for setup prerequisites.
 
-## Use eve for Vercel operations
+## Use the portable self-host launcher
 
-Use eve to link and deploy Vercel projects:
+Build and start the local service with the repository launcher:
 
 ```sh
-eve link --non-interactive --project <name-or-id> [--team <team-id-or-slug>]
-eve deploy --non-interactive --yes [--project <name-or-id>]
+pnpm self-host:check -- --tunnel=<cloudflare|tailscale|zrok|none>
+pnpm self-host -- --tunnel=<cloudflare|tailscale|zrok|none>
 ```
 
-A setup may report `eve link` as a prerequisite; run it, then retry the continuation. When a completed setup event has `deploymentRequired: true`, run the `next` command it reports.
+The launcher migrates the local SQLite database before building, binds Next.js
+to loopback, starts the selected stable tunnel, and synchronizes one-click
+device recovery when the configured public origin changes.
 
 ## Validate the change
 
@@ -57,7 +59,7 @@ Run the validation the task requests. When it does not establish the behavior yo
 ## Repository contract
 
 - The repository root owns the single Next.js application, Eve agent, and shared UI contract.
-- The workspace manager lives on `/` and the agent chat on `/chat`; Kernel browser capabilities belong under the official extension mount in `agent/extensions/kernel`.
+- The workspace manager lives on `/` and the agent chat on `/chat`; Kernel browser capabilities use the owner-scoped tools in `agent/tools/browser.ts` and `lib/server/kernel-browser.ts`.
 - Validate runtime environment variables through `lib/env.ts`. `KERNEL_API_KEY` is required by the shared-key Kernel MCP connection.
 - Run `pnpm check` and `pnpm build` before handing off changes.
 

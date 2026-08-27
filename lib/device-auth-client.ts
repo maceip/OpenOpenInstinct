@@ -12,6 +12,7 @@ import {
 const DATABASE_NAME = "openopeninstinct-auth-v1";
 const STORE_NAME = "device-keys";
 const ACTIVE_KEY = "active";
+const PENDING_KEY = "pending";
 const SIGNED_OUT_KEY = "openopeninstinct.auth.signed-out.v1";
 
 interface StoredDeviceKey {
@@ -42,7 +43,7 @@ const sessionResponseSchema = z.object({
 export async function pairFromFragment(fragment: string) {
   const pairing = parsePairingFragment(fragment);
   const device = await generateDeviceKey();
-  await saveDeviceKey(device);
+  await savePendingDeviceKey(device);
 
   const response = await fetch("/api/auth/pair", {
     body: JSON.stringify({
@@ -61,15 +62,16 @@ export async function pairFromFragment(fragment: string) {
   if (!response.ok) throw new Error(readApiError(body));
 
   const session = sessionResponseSchema.parse(body);
-  await saveDeviceKey({ ...device, enrolled: true });
+  await activateDeviceKey({ ...device, enrolled: true });
   clearSignedOutMarker();
   return session;
 }
 
 export async function recoverEnrolledDevice({ force = false } = {}) {
   if (!force && isSignedOut()) return null;
-  const device = await loadDeviceKey();
-  if (!device?.enrolled) return null;
+  const stored = await loadRecoverableDeviceKey();
+  if (!stored) return null;
+  const { device } = stored;
 
   const challengeResponse = await fetch("/api/auth/challenge", {
     body: JSON.stringify({ deviceId: device.deviceId }),
@@ -115,6 +117,9 @@ export async function recoverEnrolledDevice({ force = false } = {}) {
   });
   if (!redeemResponse.ok) return null;
   const session = sessionResponseSchema.parse(await redeemResponse.json());
+  if (stored.pending) {
+    await activateDeviceKey({ ...device, enrolled: true });
+  }
   clearSignedOutMarker();
   return session;
 }
@@ -182,10 +187,27 @@ async function loadDeviceKey() {
   );
 }
 
-async function saveDeviceKey(record: StoredDeviceKey) {
-  await withStore("readwrite", (store) =>
-    requestResult(store.put(record, ACTIVE_KEY))
+async function loadRecoverableDeviceKey() {
+  const active = await loadDeviceKey();
+  if (active?.enrolled) return { device: active, pending: false };
+  const pending = await withStore<StoredDeviceKey | undefined>(
+    "readonly",
+    (store) => requestResult(store.get(PENDING_KEY))
   );
+  return pending ? { device: pending, pending: true } : undefined;
+}
+
+async function savePendingDeviceKey(record: StoredDeviceKey) {
+  await withStore("readwrite", (store) =>
+    requestResult(store.put(record, PENDING_KEY))
+  );
+}
+
+async function activateDeviceKey(record: StoredDeviceKey) {
+  await withStore("readwrite", async (store) => {
+    await requestResult(store.put(record, ACTIVE_KEY));
+    await requestResult(store.delete(PENDING_KEY));
+  });
 }
 
 async function withStore<T>(

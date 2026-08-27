@@ -1,17 +1,23 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { kernelToolAllowlist } from "../agent/extensions/kernel/connections/browser";
 
-describe("Kernel Eve extension", () => {
-  it("does not expose a second backend-specific browser toolset", () => {
-    expect(kernelToolAllowlist).toEqual([]);
+describe("Kernel browser integration", () => {
+  it("uses the locally scoped tools without the Vercel extension adapter", () => {
+    const manifest = JSON.parse(readFileSync("package.json", "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(manifest.dependencies).not.toHaveProperty(
+      "@onkernel/eve-extension"
+    );
+    expect(readFileSync("agent/tools/browser.ts", "utf8")).toContain(
+      "requireOwnedBrowserSession"
+    );
   });
 
   it("keeps executor selection out of model instructions", () => {
     const instructions = [
       readFileSync("agent/instructions.md", "utf8"),
       readFileSync("agent/skills/browser-execution/SKILL.md", "utf8"),
-      readFileSync("agent/extensions/kernel/skills/browse.md", "utf8"),
     ].join("\n");
     expect(instructions).not.toMatch(
       /cloud browser|local browser|browser mode|browser executor|kernel__browser/i
