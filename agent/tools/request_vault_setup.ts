@@ -13,7 +13,7 @@ export default defineTool({
     return {
       message:
         "Open this page in your Local Vault Assistant deployment and complete the form. Do not send the secret in chat.",
-      url: createManagerSetupUrl(env.BETTER_AUTH_URL, request),
+      url: createManagerSetupUrl(env.PUBLIC_URL, request),
     };
   },
 });

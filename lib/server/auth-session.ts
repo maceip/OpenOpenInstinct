@@ -1,9 +1,5 @@
-import { auth, ensureAuthDatabase } from "@/auth";
-import { isFullyAuthenticatedUser } from "@/lib/auth-user";
+import { getAuthSession as readDeviceSession } from "@/auth";
 
 export async function getAuthSession(headers: Headers) {
-  await ensureAuthDatabase();
-  const session = await auth.api.getSession({ headers });
-  if (!isFullyAuthenticatedUser(session?.user)) return null;
-  return session;
+  return readDeviceSession(headers);
 }

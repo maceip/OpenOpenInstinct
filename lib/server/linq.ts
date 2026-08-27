@@ -1,5 +1,4 @@
-import { getToken } from "@vercel/connect";
-import { LINQ_CONNECTOR } from "@/lib/linq";
+import { env } from "@/lib/env";
 
 const LINQ_MESSAGES_URL = "https://api.linqapp.com/api/partner/v3/messages";
 
@@ -12,16 +11,13 @@ export async function sendLinqText({
   readonly message: string;
   readonly to: string;
 }) {
-  const token = await getToken(LINQ_CONNECTOR, {
-    subject: { type: "app" },
-  });
   const response = await fetch(LINQ_MESSAGES_URL, {
     body: JSON.stringify({
       message: { parts: [{ type: "text", value: message }] },
       to: [to],
     }),
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${env.LINQ_API_KEY}`,
       "Content-Type": "application/json",
       "Idempotency-Key": idempotencyKey,
     },

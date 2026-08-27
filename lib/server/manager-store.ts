@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { ensureScope } from "@/db/services/scope";
-import { selectGatewayModel } from "@/db/services/settings";
 import {
   createVaultItem as insertVaultItem,
   deleteVaultItem,
   listVaultItems,
 } from "@/db/services/vault";
 import type { AccessScope } from "../access-scope";
+import { env } from "../env";
 import type { ManagerMutation } from "../manager";
 import { getModelSettings } from "../model-config";
 import {
@@ -20,7 +20,7 @@ export async function readManagerSnapshot(scope: AccessScope) {
   await ensureScope(scope);
   const [vaultRows, modelSettings] = await Promise.all([
     listVaultItems(scope),
-    getModelSettings(scope),
+    Promise.resolve(getModelSettings()),
   ]);
   const vaultItems = await Promise.all(
     vaultRows.map(async (row) => ({
@@ -35,7 +35,11 @@ export async function readManagerSnapshot(scope: AccessScope) {
 
   return {
     browser: { available: true },
-    runtime: { inference: modelSettings.modelId },
+    channels: { linqPhoneNumber: env.LINQ_PHONE_NUMBER },
+    runtime: {
+      inference: modelSettings.modelId,
+      provider: modelSettings.provider,
+    },
     secretStore: secretStoreStatus(),
     vaultItems,
   };
@@ -48,9 +52,6 @@ export async function applyManagerMutation(
   await ensureScope(scope);
 
   switch (mutation.action) {
-    case "model.select":
-      await selectGatewayModel(scope, mutation.modelId);
-      break;
     case "vault.create":
       await createVaultItem(scope, mutation.input);
       break;

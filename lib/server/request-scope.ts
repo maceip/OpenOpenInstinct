@@ -5,7 +5,7 @@ import { getAuthSession } from "@/lib/server/auth-session";
 export async function requireRequestScope(): Promise<AccessScope> {
   const session = await getAuthSession(await headers());
   if (!session) throw new UnauthenticatedError();
-  return accessScopeForUser(`better-auth:${session.user.id}`);
+  return accessScopeForUser(`device-auth:${session.user.id}`);
 }
 
 export class UnauthenticatedError extends Error {

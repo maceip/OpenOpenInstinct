@@ -1,8 +1,7 @@
-import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AccessScope } from "@/lib/access-scope";
 import { chatListSchema, type ChatSummary, type SaveChat } from "@/lib/chat";
-import { chats, db } from "@/db";
+import { getDatabase } from "@/db";
 import { ensureScope } from "./scope";
 
 const chatRowSchema = z.object({
@@ -27,72 +26,97 @@ export async function listChats(scope: AccessScope) {
   const rows = chatRowSchema
     .array()
     .parse(
-      await db
-        .select()
-        .from(chats)
-        .where(eq(chats.workspaceId, scope.workspaceId))
-        .orderBy(desc(chats.updatedAt))
+      getDatabase()
+        .prepare(
+          `SELECT
+             session_id AS sessionId,
+             title,
+             created_at AS createdAt,
+             updated_at AS updatedAt,
+             input_tokens AS inputTokens,
+             output_tokens AS outputTokens,
+             cost_usd AS costUsd
+           FROM chats
+           WHERE workspace_id = ?
+           ORDER BY updated_at DESC`
+        )
+        .all(scope.workspaceId)
     );
   return chatListSchema.parse(rows.map(toChatSummary));
 }
 
 export async function readChat(scope: AccessScope, sessionId: string) {
-  const rows = await db
-    .select()
-    .from(chats)
-    .where(
-      and(
-        eq(chats.workspaceId, scope.workspaceId),
-        eq(chats.sessionId, sessionId)
+  const row = chatRowSchema.optional().parse(
+    getDatabase()
+      .prepare(
+        `SELECT
+           session_id AS sessionId,
+           title,
+           created_at AS createdAt,
+           updated_at AS updatedAt,
+           input_tokens AS inputTokens,
+           output_tokens AS outputTokens,
+           cost_usd AS costUsd
+         FROM chats
+         WHERE workspace_id = ? AND session_id = ?`
       )
-    )
-    .limit(1);
-  const row = chatRowSchema.optional().parse(rows[0]);
+      .get(scope.workspaceId, sessionId)
+  );
   return row ? toChatSummary(row) : undefined;
 }
 
 export async function saveChat(scope: AccessScope, chat: SaveChat) {
   await ensureScope(scope);
   const now = new Date().toISOString();
-  const existing = await db
-    .select({ sessionId: chats.sessionId })
-    .from(chats)
-    .where(
-      and(
-        eq(chats.workspaceId, scope.workspaceId),
-        eq(chats.sessionId, chat.sessionId)
+  const database = getDatabase();
+  const existing = database
+    .prepare(
+      `SELECT 1 FROM chats WHERE workspace_id = ? AND session_id = ?`
+    )
+    .get(scope.workspaceId, chat.sessionId);
+  if (!existing) {
+    database
+      .prepare(
+        `INSERT INTO chats
+           (session_id, workspace_id, title, created_at, updated_at,
+            input_tokens, output_tokens, cost_usd)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-    );
-  if (existing.length === 0) {
-    await db.insert(chats).values({
-      costUsd: chat.usage?.costUsd ?? null,
-      createdAt: now,
-      inputTokens: chat.usage?.inputTokens ?? 0,
-      outputTokens: chat.usage?.outputTokens ?? 0,
-      sessionId: chat.sessionId,
-      title: chat.title ?? "New chat",
-      updatedAt: now,
-      workspaceId: scope.workspaceId,
-    });
+      .run(
+        chat.sessionId,
+        scope.workspaceId,
+        chat.title ?? "New chat",
+        now,
+        now,
+        chat.usage?.inputTokens ?? 0,
+        chat.usage?.outputTokens ?? 0,
+        chat.usage?.costUsd ?? null
+      );
     return;
   }
-  await db
-    .update(chats)
-    .set({
-      ...(chat.title === undefined ? {} : { title: chat.title }),
-      ...(chat.usage === undefined
-        ? {}
-        : {
-            costUsd: chat.usage.costUsd,
-            inputTokens: chat.usage.inputTokens,
-            outputTokens: chat.usage.outputTokens,
-          }),
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(chats.workspaceId, scope.workspaceId),
-        eq(chats.sessionId, chat.sessionId)
-      )
+
+  const assignments = ["updated_at = ?"];
+  const values: Array<number | string | null> = [now];
+  if (chat.title !== undefined) {
+    assignments.push("title = ?");
+    values.push(chat.title);
+  }
+  if (chat.usage !== undefined) {
+    assignments.push(
+      "input_tokens = ?",
+      "output_tokens = ?",
+      "cost_usd = ?"
     );
+    values.push(
+      chat.usage.inputTokens,
+      chat.usage.outputTokens,
+      chat.usage.costUsd
+    );
+  }
+  database
+    .prepare(
+      `UPDATE chats SET ${assignments.join(", ")}
+       WHERE workspace_id = ? AND session_id = ?`
+    )
+    .run(...values, scope.workspaceId, chat.sessionId);
 }

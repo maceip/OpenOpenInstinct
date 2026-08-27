@@ -2,23 +2,23 @@
 
 import { LogOutIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
+import { signOut, useAuthSession } from "@/lib/auth-client";
 import { browserRunStoreKeyForWorkspace } from "@/lib/browser-run-store";
 
 export function AccountControl() {
-  const { data: session } = authClient.useSession();
-  if (!session?.user) return null;
+  const session = useAuthSession();
+  if (!session) return null;
 
   return (
     <div className="flex items-center gap-2 border-t border-sidebar-border px-3 py-3">
       <span className="min-w-0 flex-1 truncate type-label text-muted-foreground">
-        {maskPhoneNumber(session.user.phoneNumber)}
+        {session.device.name}
       </span>
       <Button
         aria-label="Sign out"
         onClick={() => {
           clearWorkspaceBrowserData();
-          void authClient.signOut().finally(() => {
+          void signOut().finally(() => {
             window.location.assign("/sign-in");
           });
         }}
@@ -30,11 +30,6 @@ export function AccountControl() {
       </Button>
     </div>
   );
-}
-
-function maskPhoneNumber(phoneNumber: string | null | undefined) {
-  if (!phoneNumber) return "Signed in";
-  return `Phone ending in ${phoneNumber.slice(-4)}`;
 }
 
 function clearWorkspaceBrowserData() {

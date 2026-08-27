@@ -6,6 +6,6 @@ export async function requestScopeFromRequest(
 ): Promise<AccessScope | undefined> {
   const session = await getAuthSession(request.headers);
   return session
-    ? accessScopeForUser(`better-auth:${session.user.id}`)
+    ? accessScopeForUser(`device-auth:${session.user.id}`)
     : undefined;
 }

@@ -1,4 +1,4 @@
-import { createWorld } from "@workflow/world-vercel";
+import { createWorld } from "@workflow/world-local";
 import { listOwnedSessionIds } from "@/db/services/sessions";
 import { taskHistoryPageSchema } from "@/lib/task-history";
 import {
@@ -17,9 +17,7 @@ export async function GET(request: Request) {
     const scope = await requireRequestScope();
     const ownedSessionIds = await listOwnedSessionIds(scope);
     const cursor = new URL(request.url).searchParams.get("cursor") ?? undefined;
-    const world = createWorld({
-      headers: { "User-Agent": "local-vault-assistant/task-history" },
-    });
+    const world = createWorld({ dataDir: ".eve/.workflow-data" });
     const runs: Awaited<ReturnType<typeof world.runs.list>>["data"][number][] =
       [];
     let nextCursor = cursor;

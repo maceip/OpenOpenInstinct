@@ -1,6 +1,5 @@
-import { and, eq } from "drizzle-orm";
 import type { AccessScope } from "@/lib/access-scope";
-import { db, encryptedSecrets } from "@/db";
+import { getDatabase } from "@/db";
 
 export async function writeEncryptedSecret(
   scope: AccessScope,
@@ -8,48 +7,36 @@ export async function writeEncryptedSecret(
   encryptedValue: string
 ) {
   const updatedAt = new Date().toISOString();
-  await db
-    .insert(encryptedSecrets)
-    .values({
-      encryptedValue,
-      id,
-      namespace: "vault",
-      updatedAt,
-      workspaceId: scope.workspaceId,
-    })
-    .onConflictDoUpdate({
-      target: [
-        encryptedSecrets.workspaceId,
-        encryptedSecrets.namespace,
-        encryptedSecrets.id,
-      ],
-      set: { encryptedValue, updatedAt },
-    });
+  getDatabase()
+    .prepare(
+      `INSERT INTO encrypted_secrets
+         (workspace_id, namespace, id, encrypted_value, updated_at)
+       VALUES (?, 'vault', ?, ?, ?)
+       ON CONFLICT(workspace_id, namespace, id) DO UPDATE SET
+         encrypted_value = excluded.encrypted_value,
+         updated_at = excluded.updated_at`
+    )
+    .run(scope.workspaceId, id, encryptedValue, updatedAt);
 }
 
 export async function readEncryptedSecret(scope: AccessScope, id: string) {
-  const rows = await db
-    .select({ encryptedValue: encryptedSecrets.encryptedValue })
-    .from(encryptedSecrets)
-    .where(
-      and(
-        eq(encryptedSecrets.workspaceId, scope.workspaceId),
-        eq(encryptedSecrets.namespace, "vault"),
-        eq(encryptedSecrets.id, id)
-      )
+  const row = getDatabase()
+    .prepare(
+      `SELECT encrypted_value AS encryptedValue
+       FROM encrypted_secrets
+       WHERE workspace_id = ? AND namespace = 'vault' AND id = ?`
     )
-    .limit(1);
-  return rows[0]?.encryptedValue;
+    .get(scope.workspaceId, id);
+  return typeof row?.encryptedValue === "string"
+    ? row.encryptedValue
+    : undefined;
 }
 
 export async function deleteEncryptedSecret(scope: AccessScope, id: string) {
-  await db
-    .delete(encryptedSecrets)
-    .where(
-      and(
-        eq(encryptedSecrets.workspaceId, scope.workspaceId),
-        eq(encryptedSecrets.namespace, "vault"),
-        eq(encryptedSecrets.id, id)
-      )
-    );
+  getDatabase()
+    .prepare(
+      `DELETE FROM encrypted_secrets
+       WHERE workspace_id = ? AND namespace = 'vault' AND id = ?`
+    )
+    .run(scope.workspaceId, id);
 }

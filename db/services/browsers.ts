@@ -1,67 +1,63 @@
-import { and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
 import type { AccessScope } from "@/lib/access-scope";
-import { browserSessions, db } from "@/db";
+import { getDatabase } from "@/db";
 
-type BrowserSessionRecord = Pick<
-  typeof browserSessions.$inferSelect,
-  "createdAt" | "sessionId"
->;
+const browserSessionSchema = z.object({
+  createdAt: z.string(),
+  sessionId: z.string().min(1),
+});
+type BrowserSessionRecord = z.infer<typeof browserSessionSchema>;
 
 export async function createBrowserSession(
   scope: AccessScope,
   record: BrowserSessionRecord
 ) {
-  await db.insert(browserSessions).values({
-    createdAt: record.createdAt,
-    createdByUserId: scope.userId,
-    sessionId: record.sessionId,
-    workspaceId: scope.workspaceId,
-  });
+  getDatabase()
+    .prepare(
+      `INSERT INTO browser_sessions
+         (session_id, workspace_id, created_by_user_id, created_at)
+       VALUES (?, ?, ?, ?)`
+    )
+    .run(record.sessionId, scope.workspaceId, scope.userId, record.createdAt);
 }
 
 export async function listBrowserSessions(scope: AccessScope) {
-  return db
-    .select({
-      createdAt: browserSessions.createdAt,
-      sessionId: browserSessions.sessionId,
-    })
-    .from(browserSessions)
-    .where(eq(browserSessions.workspaceId, scope.workspaceId))
-    .orderBy(desc(browserSessions.createdAt));
+  return browserSessionSchema.array().parse(
+    getDatabase()
+      .prepare(
+        `SELECT created_at AS createdAt, session_id AS sessionId
+         FROM browser_sessions
+         WHERE workspace_id = ?
+         ORDER BY created_at DESC`
+      )
+      .all(scope.workspaceId)
+  );
 }
 
 export async function readBrowserSession(
   scope: AccessScope,
   sessionId: string
 ) {
-  const rows = await db
-    .select({
-      createdAt: browserSessions.createdAt,
-      sessionId: browserSessions.sessionId,
-    })
-    .from(browserSessions)
-    .where(
-      and(
-        eq(browserSessions.workspaceId, scope.workspaceId),
-        eq(browserSessions.sessionId, sessionId)
+  return browserSessionSchema.optional().parse(
+    getDatabase()
+      .prepare(
+        `SELECT created_at AS createdAt, session_id AS sessionId
+         FROM browser_sessions
+         WHERE workspace_id = ? AND session_id = ?`
       )
-    )
-    .limit(1);
-  return rows[0];
+      .get(scope.workspaceId, sessionId)
+  );
 }
 
 export async function deleteBrowserSession(
   scope: AccessScope,
   sessionId: string
 ) {
-  const rows = await db
-    .delete(browserSessions)
-    .where(
-      and(
-        eq(browserSessions.workspaceId, scope.workspaceId),
-        eq(browserSessions.sessionId, sessionId)
-      )
+  const result = getDatabase()
+    .prepare(
+      `DELETE FROM browser_sessions
+       WHERE workspace_id = ? AND session_id = ?`
     )
-    .returning({ sessionId: browserSessions.sessionId });
-  return rows.length > 0;
+    .run(scope.workspaceId, sessionId);
+  return result.changes > 0;
 }
