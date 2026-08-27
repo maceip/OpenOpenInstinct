@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Mocking tool execution context in unit test */
 import type { ToolContext } from "eve/tools";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import fillFromVault, {
@@ -63,27 +64,27 @@ vi.mock("@/lib/server/kernel-browser", () => ({
   requireOwnedBrowserSession: mocks.requireOwnedBrowserSession,
 }));
 
-const toolContext: ToolContext = {
+const toolContext = {
   abortSignal: new AbortController().signal,
   session: {
     auth: {
       current: {
         attributes: { workspaceId: "personal:test-workspace" },
         id: "user-1",
-      } as never,
+      },
       initiator: {
         attributes: { workspaceId: "personal:test-workspace" },
         id: "user-1",
-      } as never,
-      role: "user",
+      },
     },
-    client: {} as never,
-    environment: {},
+    getSandbox: vi.fn<() => void>(),
+    getSkill: vi.fn<() => void>(),
     id: "session-1",
-    mode: "interactive",
-    origin: "test",
+    turn: {
+      id: "turn-1",
+    },
   },
-};
+} as unknown as ToolContext;
 
 beforeEach(() => {
   vi.clearAllMocks();
