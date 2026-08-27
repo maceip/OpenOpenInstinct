@@ -44,6 +44,8 @@ describe("SQLite schema policy", () => {
       "@electric-sql/pglite",
       "@neondatabase/serverless",
       "@vercel/connect",
+      "@vercel/queue",
+      "@workflow/world-local",
       "@workflow/world-vercel",
       "better-auth",
       "drizzle-kit",
@@ -78,7 +80,7 @@ describe("SQLite schema policy", () => {
 
     expect(joined).not.toMatch(/CREATE TABLE|ALTER TABLE/iu);
     expect(joined).not.toMatch(/postgres|neon|world-vercel|AI Gateway/iu);
-    expect(runtimeSources[0]).toContain("@workflow/world-local");
+    expect(runtimeSources[0]).toContain("listLocalTaskHistory");
     expect(runtimeSources[1]).toContain("@ai-sdk/openai");
 
     await expect(access(new URL("vercel.json", root))).rejects.toThrow(

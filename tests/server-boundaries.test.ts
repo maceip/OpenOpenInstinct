@@ -26,6 +26,7 @@ describe("server module boundaries", () => {
     const protectedModules = [
       "auth.ts",
       "lib/server/auth-session.ts",
+      "lib/server/local-task-history.ts",
       "lib/server/manager-store.ts",
       "lib/server/request-scope.ts",
       "lib/server/request-security.ts",
